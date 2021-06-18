@@ -1,3 +1,6 @@
+pub mod components;
+
+use crate::game::components::card::Card;
 
 struct CardStack {
     cards: Vec<Card>,
@@ -5,7 +8,9 @@ struct CardStack {
 
 impl CardStack {
     pub fn new (cards: Vec<Card>) -> CardStack {
-        CardStack(cards)
+        CardStack {
+            cards
+        }
     }
     pub fn len (&self) -> usize {
         self.cards.len()
@@ -19,9 +24,9 @@ impl CardStack {
 }
 
 struct PlayerArea {
-    discard: Cards,
-    deck: Cards,
-    hand: Cards,
-    bases: Cards,
-    scrapped: Cards
+    discard: CardStack,
+    deck: CardStack,
+    hand: CardStack,
+    bases: CardStack,
+    scrapped: CardStack,
 }
