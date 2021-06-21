@@ -1,22 +1,16 @@
 use crate::game::components::faction::{Faction, all_factions};
 use std::collections::{HashSet, HashMap};
-use crate::game::GameState;
-use std::iter::{FromIterator};
+use crate::game::components::Defense;
 
-type Defense = u8;
-type Coin = u8;
-type Authority = u8;
-type Combat = u8;
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Card {
     pub name: String,
     pub base: Option<Base>, // None -> not a base, otherwise which base is it?
     pub synergizes_with: HashSet<Faction>,
-    pub effects: HashSet<String>,
+    pub effects: HashSet<(String, String)>
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Base {
     Outpost(Defense),
     Base(Defense)
@@ -30,19 +24,6 @@ impl Base {
         }
     }
 }
-
-// things to do on the card:
-struct Good {
-    trade: Coin,
-    authority: Authority,
-    combat: Combat
-}
-
-enum Either<L, R> {
-    Left(L),
-    Right(R)
-}
-
 
 impl Card {
     fn synergizes_over (&self, faction: &Faction) -> bool {
@@ -58,8 +39,4 @@ impl Card {
         }
         set
     }
-}
-
-trait Predicate<T> {
-    fn test(object: T) -> bool;
 }

@@ -1,13 +1,14 @@
 extern crate yaml_rust;
-use crate::game::components::card::{Card, Base};
-use self::yaml_rust::{YamlLoader, ScanError, Yaml};
-use std::error::Error;
-use std::collections::{HashMap, HashSet};
+
+use std::collections::{HashSet};
 use std::fs;
-use std::ops::Add;
+
+use crate::game::components::card::{Base, Card};
 use crate::game::components::faction::Faction;
 
-pub fn parse_file (filepath: &String) -> Result<Vec<Card>, &str> {
+use self::yaml_rust::{Yaml, YamlLoader};
+
+pub fn parse_file (filepath: String) -> Result<Vec<Card>, &'static str> {
     let contents = fs::read_to_string(filepath);
     match contents {
         Ok(contents) => {
@@ -25,7 +26,7 @@ pub fn parse_file (filepath: &String) -> Result<Vec<Card>, &str> {
                                     Some(key) => {
                                         match parse_card(key, v.clone()) {
                                             Ok(nice) => cards.push(nice),
-                                            Err(e) => return Err("card not parsed correctly")
+                                            Err(_) => return Err("card not parsed correctly")
                                         }
                                     }
                                 }

@@ -1,2 +1,12 @@
 card1:
   base: false
+  synergy:
+    - m
+    - f
+card2:
+  base: true
+  outpost: false
+  defense: 6
+  synergy:
+    - b
+    - s
