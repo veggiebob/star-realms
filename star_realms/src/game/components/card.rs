@@ -1,25 +1,23 @@
 use crate::game::components::faction::{Faction, all_factions};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+use crate::game::GameState;
+use std::iter::{FromIterator};
 
 type Defense = u8;
 type Coin = u8;
 type Authority = u8;
 type Combat = u8;
 
-type Synergizing = Box<dyn Fn(&Card, &Faction) -> bool>;
+#[derive(Clone, Debug)]
 pub struct Card {
-    base: Option<Base>, // None -> not a base, otherwise which base is it?
-    synergizing_strategy: Synergizing,
+    pub name: String,
+    pub base: Option<Base>, // None -> not a base, otherwise which base is it?
+    pub synergizes_with: HashSet<Faction>,
+    pub effects: HashSet<String>,
 }
 
-pub fn synergizes_all() -> Synergizing {
-    Box::new(|_, _| true)
-}
-pub fn synergizes_one(a: Faction) -> Synergizing {
-    Box::new(move |_, f| *f == a)
-}
-
-enum Base {
+#[derive(Clone, Debug)]
+pub enum Base {
     Outpost(Defense),
     Base(Defense)
 }
@@ -33,6 +31,7 @@ impl Base {
     }
 }
 
+// things to do on the card:
 struct Good {
     trade: Coin,
     authority: Authority,
@@ -47,7 +46,7 @@ enum Either<L, R> {
 
 impl Card {
     fn synergizes_over (&self, faction: &Faction) -> bool {
-        (self.synergizing_strategy)(self, faction)
+        self.synergizes_with.contains(faction)
     }
     fn synergizes_with (&self, other: Card) -> HashSet<Faction> {
         let mut set = HashSet::new();
@@ -59,4 +58,8 @@ impl Card {
         }
         set
     }
+}
+
+trait Predicate<T> {
+    fn test(object: T) -> bool;
 }

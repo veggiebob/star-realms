@@ -1,6 +1,6 @@
 use crate::game::components::faction::Faction::*;
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 pub enum Faction {
     Mech, // The Machine Cult
     Star, // The Star Empire
