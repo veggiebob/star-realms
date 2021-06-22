@@ -3,13 +3,15 @@ extern crate regex;
 
 use std::collections::{HashSet, HashMap};
 
-use crate::game::components::card::{Base, Card};
+use crate::game::components::card::{Base, Card, CardStatus};
 
 use self::rand::Rng;
 use std::ops::{Add, AddAssign};
 use crate::game::components::{Coin, Authority, Combat};
 use self::regex::Regex;
 use crate::parse::parse_goods;
+use std::iter::Map;
+use crate::game::CurrentPlayer::Player1;
 
 pub mod components;
 
@@ -65,6 +67,14 @@ impl<T> Stack<T> {
             self.add(new_stack.elements.remove(r));
         }
     }
+
+    /// draw a card from self and place it in other
+    pub fn draw_to(&mut self, other: &mut Stack<T>) {
+        match self.draw() {
+            None => (),
+            Some(card) => other.add(card),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -77,24 +87,10 @@ pub struct Goods {
 pub struct PlayerArea {
     discard: CardStack,
     deck: CardStack,
-    hand: CardStack,
+    hand_id: HashMap<u8, (Card, CardStatus)>,
     bases: CardStack,
     scrapped: CardStack,
     goods: Goods,
-}
-
-impl PlayerArea {
-    fn draw(&mut self) -> Card {
-        if let Some(c) = self.deck.draw() {
-            c
-        } else {
-            self.discard.shuffle();
-            while let Some(c) = self.discard.draw() {
-                self.deck.add(c);
-            }
-            self.draw()
-        }
-    }
 }
 
 pub enum CurrentPlayer {
@@ -110,10 +106,102 @@ pub struct GameState {
     explorers: u8,
     scrapped: CardStack,
     trade_row_stack: CardStack,
-    goods: Goods,
+}
+
+impl PlayerArea {
+    pub fn new(scout: &Card, viper: &Card) -> PlayerArea {
+        let mut pa = PlayerArea {
+            discard: CardStack::empty(),
+            deck: CardStack::empty(),
+            bases: CardStack::empty(),
+            scrapped: CardStack::empty(),
+            hand_id: HashMap::new(),
+            goods: Goods {
+                combat: 0,
+                authority: 0,
+                trade: 0
+            }
+        };
+        for i in 0..8 {
+            pa.deck.add(scout.clone());
+        }
+        for i in 0..2 {
+            pa.deck.add(viper.clone());
+        }
+        pa.deck.shuffle();
+        pa
+    }
+    pub fn draw_hand(&mut self) {
+        let mut id_index = 0 as u8;
+        for i in 0..5 {
+            let card = self.draw();
+            while self.hand_id.contains_key(&id_index) {
+                id_index += 1;
+            }
+            self.hand_id.insert(id_index, (card, CardStatus::new()));
+        }
+    }
+    pub fn discard_hand(&mut self) {
+        let keys_vec = {
+            let mut tmp = vec![];
+            let keys = self.hand_id.keys();
+            for id in keys {
+                tmp.push(*id);
+            }
+            tmp
+        };
+        for id in keys_vec {
+            match self.hand_id.remove(&id) {
+                Some((card, card_status)) => self.discard.add(card),
+                None => panic!("PlayerArea::discard_hand: id {} is not in hand_id somehow", id)
+            }
+        }
+    }
+    fn draw(&mut self) -> Card {
+        if let Some(c) = self.deck.draw() {
+            c
+        } else {
+            self.discard.shuffle();
+            while let Some(c) = self.discard.draw() {
+                self.deck.add(c);
+            }
+            self.draw() // this *should* never recurse infinitely because you start with 10 cards lol
+        }
+    }
 }
 
 impl GameState {
+    /// panics if there is no scout or viper
+    /// this is helpful https://www.starrealms.com/sets-and-expansions/
+    fn new (all_cards: &HashMap<&str, Card>, deck_cards: Vec<Card>) -> GameState {
+        let scout = all_cards.get("scout").expect("cards need a scout!");
+        let viper = all_cards.get("viper").expect("cards need a viper!");
+        let mut gs = GameState {
+            player1: PlayerArea::new(scout, viper),
+            player2: PlayerArea::new(scout, viper),
+            current_player: Player1,
+            trade_row: CardStack::empty(),
+            explorers: 10,
+            scrapped: CardStack::empty(),
+            trade_row_stack: {
+                let mut stack = CardStack::new(deck_cards);
+                stack.shuffle();
+                stack
+            },
+        };
+        gs.fill_trade_row();
+        gs
+    }
+    fn fill_trade_row(&mut self) {
+        // todo: number of cards in trade row hard-coded
+        let left = 5 - self.trade_row.len();
+        for i in 0..left {
+            match self.trade_row_stack.draw() {
+                None => break,
+                Some(card) => self.trade_row.add(card)
+            }
+        }
+    }
     fn get_current_player(&self) -> &PlayerArea {
         match &self.current_player {
             Player1 => &self.player1,
@@ -147,7 +235,7 @@ pub struct ActionMeta {
     config_description: Option<HashMap<u8, &'static str>>,
 }
 
-pub type ConditionFunc = Box<dyn FnMut(&GameState) -> bool>;
+pub type ConditionFunc = Box<dyn FnMut(&GameState, u8) -> bool>;
 
 pub fn validate_condition(name: &str) -> bool {
     get_condition(name).is_some()
@@ -167,7 +255,14 @@ pub fn validate_card(card: &Card) -> bool {
 
 pub fn get_condition(name: &str) -> Option<ConditionFunc> {
     match name {
-        "any" => Some(Box::new(|_| true)),
+        "any" => Some(Box::new(|_, _| true)),
+        "trash" => Some(Box::new(
+            |game, id| {
+                game.get_current_player().hand_id.get(&id)
+                    .expect("trash condition: bad id supplied")
+                    .1.scrapped
+            }
+        )),
         _ => None
     }
 }
@@ -196,7 +291,8 @@ pub fn get_action(name: &str) -> Option<(ActionMeta, ActionFunc)> {
                         config_description: None,
                     },
                     Box::new(|game: &mut GameState, _: u8| {
-                        game.player1.hand.add(Card {
+                        game.player1.discard.add(Card {
+                            cost: 255,
                             name: String::from("bazinga"),
                             base: Some(Base::Outpost(4)),
                             synergizes_with: HashSet::new(),

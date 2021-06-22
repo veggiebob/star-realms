@@ -1,19 +1,34 @@
 use crate::game::components::faction::{Faction, all_factions};
 use std::collections::{HashSet};
-use crate::game::components::Defense;
+use crate::game::components::{Defense, Coin};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Card {
+    pub cost: Coin,
     pub name: String,
     pub base: Option<Base>, // None -> not a base, otherwise which base is it?
     pub synergizes_with: HashSet<Faction>,
     pub effects: HashSet<(String, String)>
 }
 
+pub struct CardStatus {
+    pub effects_used: HashSet<(String, String)>,
+    pub scrapped: bool
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Base {
     Outpost(Defense),
     Base(Defense)
+}
+
+impl CardStatus {
+    pub fn new () -> CardStatus {
+        CardStatus {
+            effects_used: HashSet::new(),
+            scrapped: false
+        }
+    }
 }
 
 impl Base {

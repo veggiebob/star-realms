@@ -9,6 +9,7 @@ use crate::game::components::faction::Faction;
 use self::yaml_rust::{Yaml, YamlLoader};
 use self::regex::Regex;
 use crate::game::Goods;
+use crate::game::components::Coin;
 
 pub fn parse_file (filepath: String) -> Result<Vec<Card>, &'static str> {
     let contents = fs::read_to_string(filepath);
@@ -66,6 +67,12 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, &'static str> {
         }
         None => return Err("must supply 'base'")
     };
+
+    let cost = match obj["cost"].as_i64() {
+        Some(_cost) => _cost as Coin,
+        None => return Err("must supply 'cost'")
+    };
+
     let mut synergizes_with = HashSet::new();
     let mut effects = HashSet::new();
 
@@ -108,6 +115,7 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, &'static str> {
     }
 
     Ok(Card {
+        cost,
         name: name.to_owned(),
         base,
         synergizes_with,
@@ -116,11 +124,11 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, &'static str> {
 }
 
 pub fn parse_goods(good_str: &str) -> Option<Goods> {
-    // Remember: C:A:T
+    // Remember: C.A.T
 
     // also this has been known to be a bad design pattern but for now I'll keep it in here for simplicity
     // see https://docs.rs/regex/1.5.4/regex/
-    let pattern = Regex::new(r"G(\d*):(\d*):(\d*)").unwrap();
+    let pattern = Regex::new(r"G(\d*).(\d*).(\d*)").unwrap();
 
     let caps = pattern.captures(good_str);
     match caps {

@@ -54,6 +54,7 @@ card2:
         // print_long_message("testing card 1");
         let yaml = YamlLoader::load_from_str("\
 card1:
+  cost: 1
   base: false
   synergy:
     - m
@@ -63,6 +64,7 @@ card1:
         let card = parse_card("card1", yaml["card1"].clone()).unwrap();
         // println!("{:?}", card);
         assert_eq!(card, Card {
+            cost: 1,
             name: "card1".to_owned(),
             base: None,
             synergizes_with: {
@@ -80,6 +82,7 @@ card1:
         // print_long_message("testing card 2");
         let yaml = YamlLoader::load_from_str("\
 card2:
+  cost: 2
   base: true
   defense: 4
   outpost: true
@@ -91,8 +94,9 @@ card2:
         ");
         let yaml = &yaml.unwrap()[0];
         let card = parse_card("card2", yaml["card2"].clone()).unwrap();
-        println!("{:?}", card);
+        // println!("{:?}", card);
         assert_eq!(card, Card {
+            cost: 2,
             name: "card2".to_owned(),
             base: Some(Base::Outpost(4)),
             synergizes_with: {
@@ -115,6 +119,7 @@ card2:
         let cards = parse_file("config/test.yaml".to_owned()).unwrap();
         assert_eq!(cards.len(), 2);
         assert_eq!(cards[0], Card {
+            cost: 1,
             name: "card1".to_owned(),
             base: None,
             effects: HashSet::new(),
@@ -126,6 +131,7 @@ card2:
             },
         });
         assert_eq!(cards[1], Card {
+            cost: 2,
             name: "card2".to_owned(),
             base: Some(Base::Base(6)),
             synergizes_with: {
@@ -139,6 +145,17 @@ card2:
                 set
             },
         });
+        for card in cards {
+            assert!(validate_card(&card));
+        }
+    }
+
+    #[test]
+    fn validate_production_cards () {
+        let cards = parse_file("config/cards.yaml".to_owned()).unwrap();
+        for card in cards {
+            assert!(validate_card(&card));
+        }
     }
 
     #[test]
