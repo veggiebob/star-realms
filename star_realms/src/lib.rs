@@ -5,9 +5,9 @@ mod parse;
 
 #[cfg(test)]
 mod tests {
-    use crate::game::Stack;
-    use crate::parse::{parse_file, parse_card};
-    use yaml_rust::{YamlLoader, Yaml};
+    use crate::game::{Stack, Goods, validate_card};
+    use crate::parse::{parse_file, parse_card, parse_goods};
+    use yaml_rust::{YamlLoader};
     use yaml_rust::yaml::Yaml::Hash;
     use crate::game::components::card::Card;
     use crate::game::components::card::Base;
@@ -86,10 +86,12 @@ card2:
   synergy:
     - s
     - f
+  effects:
+    any: test
         ");
         let yaml = &yaml.unwrap()[0];
         let card = parse_card("card2", yaml["card2"].clone()).unwrap();
-        // println!("{:?}", card);
+        println!("{:?}", card);
         assert_eq!(card, Card {
             name: "card2".to_owned(),
             base: Some(Base::Outpost(4)),
@@ -101,9 +103,11 @@ card2:
             },
             effects: {
                 let mut set = HashSet::new();
+                set.insert(("any".to_owned(), "test".to_owned()));
                 set
             },
-        })
+        });
+        assert!(validate_card(&card));
     }
 
     #[test]
@@ -134,6 +138,25 @@ card2:
                 let mut set = HashSet::new();
                 set
             },
+        });
+    }
+
+    #[test]
+    fn test_parse_goods () {
+        assert_eq!(parse_goods("G6:3:0").unwrap(), Goods {
+            combat: 6,
+            authority: 3,
+            trade: 0
+        });
+        assert_eq!(parse_goods("G12:0:4").unwrap(), Goods {
+            combat: 12,
+            authority: 0,
+            trade: 4
+        });
+        assert_eq!(parse_goods("G144:225:124").unwrap(), Goods {
+            combat: 144,
+            authority: 225,
+            trade: 124
         });
     }
 

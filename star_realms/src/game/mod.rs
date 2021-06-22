@@ -1,5 +1,6 @@
 extern crate rand;
 extern crate regex;
+
 use std::collections::{HashSet, HashMap};
 
 use crate::game::components::card::{Base, Card};
@@ -7,6 +8,8 @@ use crate::game::components::card::{Base, Card};
 use self::rand::Rng;
 use std::ops::{Add, AddAssign};
 use crate::game::components::{Coin, Authority, Combat};
+use self::regex::Regex;
+use crate::parse::parse_goods;
 
 pub mod components;
 
@@ -66,9 +69,9 @@ impl<T> Stack<T> {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Goods {
-    trade: Coin,
-    authority: Authority,
-    combat: Combat,
+    pub(crate) trade: Coin,
+    pub(crate) authority: Authority,
+    pub(crate) combat: Combat,
 }
 
 pub struct PlayerArea {
@@ -134,6 +137,8 @@ impl GameState {
     }
 }
 
+/// Effects!
+
 pub type ConfigError = &'static str;
 pub type ActionFunc = Box<dyn FnMut(&mut GameState, u8) -> Option<ConfigError>>;
 
@@ -144,22 +149,51 @@ pub struct ActionMeta {
 
 pub type ConditionFunc = Box<dyn FnMut(&GameState) -> bool>;
 
-pub fn get_condition(name: &String) -> Option<ConditionFunc> {
-    todo!()
+pub fn validate_condition(name: &str) -> bool {
+    get_condition(name).is_some()
 }
 
-pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
+pub fn validate_action(name: &str) -> bool {
+    get_action(name).is_some()
+}
+
+pub fn validate_effect((cond, act): (&str, &str)) -> bool {
+    validate_condition(cond) && validate_action(act)
+}
+
+pub fn validate_card(card: &Card) -> bool {
+    card.effects.iter().all(|(l,r)| validate_effect((l.as_str(), r.as_str())))
+}
+
+pub fn get_condition(name: &str) -> Option<ConditionFunc> {
+    match name {
+        "any" => Some(Box::new(|_| true)),
+        _ => None
+    }
+}
+
+pub fn get_action(name: &str) -> Option<(ActionMeta, ActionFunc)> {
     // signal to be a good
     if name.starts_with("G") {
-        return None
+        return if let Some(goods) = parse_goods(name) {
+            let action = get_good_action(goods);
+            Some(
+                (
+                    ActionMeta { description: "gives some amount of trade, authority, and combat", config_description: None },
+                    action
+                )
+            )
+        } else {
+            None
+        }
     }
-    match name.as_str() {
+    match name {
         "test" => {
             Some(
                 (
                     ActionMeta {
                         description: "test",
-                        config_description: None
+                        config_description: None,
                     },
                     Box::new(|game: &mut GameState, _: u8| {
                         game.player1.hand.add(Card {
@@ -170,17 +204,12 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                         });
                         None
                     })
-            ))
+                ))
         }
         _ => None
     }
 }
 
-pub fn parse_good_action(good_str: &String) -> Option<ActionFunc> {
-    // parse string???
-    // I'm thinking something like "G(\d*):(\d*):(\d*)" for trade, authority, and combat, respectively
-    todo!()
-}
 pub fn get_good_action(goods: Goods) -> ActionFunc {
     Box::new(move |game: &mut GameState, _: u8| {
         game.get_current_player_mut().goods += goods;
@@ -205,6 +234,7 @@ impl ActionMeta {
         self.config_description.is_none()
     }
 }
+
 impl Add for Goods {
     type Output = Self;
 
@@ -212,7 +242,7 @@ impl Add for Goods {
         Goods {
             trade: self.trade + rhs.trade,
             authority: self.authority + rhs.authority,
-            combat: self.combat + rhs.combat
+            combat: self.combat + rhs.combat,
         }
     }
 }

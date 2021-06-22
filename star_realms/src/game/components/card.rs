@@ -1,5 +1,5 @@
 use crate::game::components::faction::{Faction, all_factions};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashSet};
 use crate::game::components::Defense;
 
 #[derive(Clone, Debug, Eq, PartialEq)]

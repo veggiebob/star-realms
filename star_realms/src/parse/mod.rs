@@ -1,5 +1,5 @@
 extern crate yaml_rust;
-
+extern crate regex;
 use std::collections::{HashSet};
 use std::fs;
 
@@ -7,6 +7,8 @@ use crate::game::components::card::{Base, Card};
 use crate::game::components::faction::Faction;
 
 use self::yaml_rust::{Yaml, YamlLoader};
+use self::regex::Regex;
+use crate::game::Goods;
 
 pub fn parse_file (filepath: String) -> Result<Vec<Card>, &'static str> {
     let contents = fs::read_to_string(filepath);
@@ -90,10 +92,58 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, &'static str> {
             }
         }
     }
+
+    if let Some(mp) = obj["effects"].as_hash() {
+        for (k, v) in mp {
+            if let Some(ks) = k.as_str() {
+                if let Some(vs) = v.as_str() {
+                    effects.insert((ks.to_owned(), vs.to_owned()));
+                } else {
+                    return Err("value was not a string")
+                }
+            } else {
+                return Err("key could not be a string")
+            }
+        }
+    }
+
     Ok(Card {
         name: name.to_owned(),
         base,
         synergizes_with,
         effects,
     })
+}
+
+pub fn parse_goods(good_str: &str) -> Option<Goods> {
+    // Remember: C:A:T
+
+    // also this has been known to be a bad design pattern but for now I'll keep it in here for simplicity
+    // see https://docs.rs/regex/1.5.4/regex/
+    let pattern = Regex::new(r"G(\d*):(\d*):(\d*)").unwrap();
+
+    let caps = pattern.captures(good_str);
+    match caps {
+        None => None,
+        Some(caps) => {
+            if let Some(c) = caps.get(1) {
+                if let Some(a) = caps.get(2) {
+                    if let Some(t) = caps.get(3) {
+                        Some(Goods {
+                            // unwrapping because we used regex to get strings
+                            combat: c.as_str().parse().unwrap(),
+                            authority: a.as_str().parse().unwrap(),
+                            trade: t.as_str().parse().unwrap()
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+    }
 }
