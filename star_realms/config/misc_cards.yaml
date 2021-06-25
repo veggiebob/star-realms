@@ -1,4 +1,5 @@
 # legitimate cards
+# remember: C.A.T: combat, authority, trade
 scout:
   cost: 0
   base: false
@@ -13,5 +14,5 @@ explorer:
   cost: 2
   base: false
   effects:
-    any: G0.0.2
-    trash: G2.0.0
+    - any: G0.0.2
+    - trash: G2.0.0

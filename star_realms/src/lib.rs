@@ -5,7 +5,7 @@ mod parse;
 
 #[cfg(test)]
 mod tests {
-    use crate::game::{Stack, Goods, validate_card};
+    use crate::game::{Stack, Goods, validate_card_effects, assert_validate_card_effects};
     use crate::parse::{parse_file, parse_card, parse_goods};
     use yaml_rust::{YamlLoader};
     use yaml_rust::yaml::Yaml::Hash;
@@ -90,7 +90,7 @@ card2:
     - s
     - f
   effects:
-    any: test
+    - any: test
         ");
         let yaml = &yaml.unwrap()[0];
         let card = parse_card("card2", yaml["card2"].clone()).unwrap();
@@ -111,7 +111,7 @@ card2:
                 set
             },
         });
-        assert!(validate_card(&card));
+        assert!(validate_card_effects(&card));
     }
 
     #[test]
@@ -145,16 +145,24 @@ card2:
                 set
             },
         });
-        for card in cards {
-            assert!(validate_card(&card));
+        for card in cards.iter() {
+            assert_validate_card_effects(card);
         }
     }
 
     #[test]
-    fn validate_production_cards () {
-        let cards = parse_file("config/cards.yaml".to_owned()).unwrap();
-        for card in cards {
-            assert!(validate_card(&card));
+    fn validate_misc_cards () {
+        let cards = parse_file("config/misc_cards.yaml".to_owned()).unwrap();
+        for card in cards.iter() {
+            assert_validate_card_effects(card);
+        }
+    }
+
+    #[test]
+    fn validate_trade_cards () {
+        let cards = parse_file("config/trade_cards.yaml".to_owned()).unwrap();
+        for card in cards.iter() {
+            assert_validate_card_effects(card);
         }
     }
 

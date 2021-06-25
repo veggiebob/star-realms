@@ -8,7 +8,7 @@ pub struct Card {
     pub name: String,
     pub base: Option<Base>, // None -> not a base, otherwise which base is it?
     pub synergizes_with: HashSet<Faction>,
-    pub effects: HashSet<(String, String)>
+    pub effects: HashSet<(String, String)> // relational structure
 }
 
 pub struct CardStatus {
@@ -23,11 +23,14 @@ pub enum Base {
 }
 
 impl CardStatus {
-    pub fn new () -> CardStatus {
+    pub fn new() -> CardStatus {
         CardStatus {
             effects_used: HashSet::new(),
             scrapped: false
         }
+    }
+    pub fn all_effects_used() -> bool {
+        todo!("CardStatus::all_effects_used")
     }
 }
 

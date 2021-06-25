@@ -1,0 +1,10 @@
+port_of_call:
+  cost: 6
+  synergy:
+    - t
+  base: true
+  outpost: true
+  defense: 6
+  effects: # need relational structures
+    - trash: draw
+    - trash: destroy_target_base

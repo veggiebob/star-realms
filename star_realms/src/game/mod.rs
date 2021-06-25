@@ -14,6 +14,7 @@ use std::iter::Map;
 use crate::game::CurrentPlayer::Player1;
 
 pub mod components;
+pub mod card_library;
 
 type CardStack = Stack<Card>;
 
@@ -237,20 +238,45 @@ pub struct ActionMeta {
 
 pub type ConditionFunc = Box<dyn FnMut(&GameState, u8) -> bool>;
 
-pub fn validate_condition(name: &str) -> bool {
-    get_condition(name).is_some()
+pub fn validate_condition(name: &str) -> Option<String> {
+    match get_condition(name) {
+        Some(_) => None,
+        None => format!("Invalid condition: {}", name)
+    }
 }
 
-pub fn validate_action(name: &str) -> bool {
-    get_action(name).is_some()
+pub fn validate_action(name: &str) -> Option<String> {
+    match get_action(name) {
+        Some(_) => None,
+        None => format!("Invalid action: {}", name)
+    }
 }
 
-pub fn validate_effect((cond, act): (&str, &str)) -> bool {
-    validate_condition(cond) && validate_action(act)
+pub fn validate_effect((cond, act): (&str, &str)) -> Option<String> {
+    match validate_condition(cond) {
+        None => match validate_action(act) {
+            None => None,
+            x => x
+        },
+        x => x,
+    }
 }
 
-pub fn validate_card(card: &Card) -> bool {
-    card.effects.iter().all(|(l,r)| validate_effect((l.as_str(), r.as_str())))
+/// None -> valid
+/// String -> invalid, with reason
+pub fn validate_card_effects(card: &Card) -> Option<String> {
+    for (l, r) in card.effects.iter() {
+        if let Some(e) = validate_effect((l.as_str(), r.as_str())) {
+            return Some(e)
+        }
+    }
+    None
+}
+
+pub fn assert_validate_card_effects(card: &Card) {
+    if let Some(e) = validate_card_effects(&card) {
+        panic!("{} was not a valid card because '{}': {:?}", card.name, e, card);
+    }
 }
 
 pub fn get_condition(name: &str) -> Option<ConditionFunc> {
