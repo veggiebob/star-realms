@@ -1,20 +1,24 @@
 extern crate rand;
 extern crate regex;
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
+use std::ops::{Add, AddAssign};
 
+use crate::game::components::{Authority, Coin, Combat};
 use crate::game::components::card::{Base, Card, CardStatus};
+use crate::game::Player::Player1;
+use crate::parse::parse_goods;
 
 use self::rand::Rng;
-use std::ops::{Add, AddAssign};
-use crate::game::components::{Coin, Authority, Combat};
-use self::regex::Regex;
-use crate::parse::parse_goods;
-use std::iter::Map;
-use crate::game::CurrentPlayer::Player1;
+use crate::game::util::Failure;
+use crate::game::util::Failure::Success;
+use crate::game::RelativePlayer::Opponent;
+use crate::game::card_library::CardLibrary;
+use std::rc::Rc;
 
 pub mod components;
 pub mod card_library;
+mod util;
 
 type CardStack = Stack<Card>;
 
@@ -88,33 +92,37 @@ pub struct Goods {
 pub struct PlayerArea {
     discard: CardStack,
     deck: CardStack,
-    hand_id: HashMap<u8, (Card, CardStatus)>,
-    bases: CardStack,
+    hand_id: HashMap<u32, (Card, CardStatus)>, // all cards in hand or in play (including bases)
     scrapped: CardStack,
     goods: Goods,
 }
 
-pub enum CurrentPlayer {
+pub enum Player {
     Player1,
     Player2,
+}
+
+pub enum RelativePlayer {
+    Current,
+    Opponent
 }
 
 pub struct GameState {
     player1: PlayerArea,
     player2: PlayerArea,
-    current_player: CurrentPlayer,
+    current_player: Player,
     trade_row: CardStack,
     explorers: u8,
     scrapped: CardStack,
     trade_row_stack: CardStack,
+    card_library: Rc<CardLibrary>,
 }
 
 impl PlayerArea {
-    pub fn new(scout: &Card, viper: &Card) -> PlayerArea {
+    pub fn new(scout: Card, viper: Card) -> PlayerArea {
         let mut pa = PlayerArea {
             discard: CardStack::empty(),
             deck: CardStack::empty(),
-            bases: CardStack::empty(),
             scrapped: CardStack::empty(),
             hand_id: HashMap::new(),
             goods: Goods {
@@ -123,18 +131,21 @@ impl PlayerArea {
                 trade: 0
             }
         };
-        for i in 0..8 {
+        for _ in 0..8 {
             pa.deck.add(scout.clone());
         }
-        for i in 0..2 {
+        for _ in 0..2 {
             pa.deck.add(viper.clone());
         }
         pa.deck.shuffle();
         pa
     }
+    pub fn get_card_in_hand(&self, id: &u32) -> Option<&(Card, CardStatus)> {
+        self.hand_id.get(id)
+    }
     pub fn draw_hand(&mut self) {
-        let mut id_index = 0 as u8;
-        for i in 0..5 {
+        let mut id_index = 0;
+        for _ in 0..5 {
             let card = self.draw();
             while self.hand_id.contains_key(&id_index) {
                 id_index += 1;
@@ -152,10 +163,18 @@ impl PlayerArea {
             tmp
         };
         for id in keys_vec {
-            match self.hand_id.remove(&id) {
-                Some((card, card_status)) => self.discard.add(card),
-                None => panic!("PlayerArea::discard_hand: id {} is not in hand_id somehow", id)
+            if let Failure::Failure(_) = self.discard_by_id(&id) {
+                panic!("PlayerArea::discard_hand: id {} is not in hand_id somehow", id);
             }
+        }
+    }
+    pub fn discard_by_id(&mut self, id: &u32) -> Failure<String> {
+        match self.hand_id.remove(id) {
+            Some((card, _)) => {
+                self.discard.add(card);
+                Failure::Success
+            },
+            None => Failure::Failure(format!("cannot discard card by id {}!", id))
         }
     }
     fn draw(&mut self) -> Card {
@@ -174,21 +193,22 @@ impl PlayerArea {
 impl GameState {
     /// panics if there is no scout or viper
     /// this is helpful https://www.starrealms.com/sets-and-expansions/
-    fn new (all_cards: &HashMap<&str, Card>, deck_cards: Vec<Card>) -> GameState {
-        let scout = all_cards.get("scout").expect("cards need a scout!");
-        let viper = all_cards.get("viper").expect("cards need a viper!");
+    fn new (card_library: Rc<CardLibrary>) -> GameState {
+        let scout = card_library.get_scout().expect("card library needs a scout!");
+        let viper = card_library.get_viper().expect("card library needs a viper!");
         let mut gs = GameState {
-            player1: PlayerArea::new(scout, viper),
-            player2: PlayerArea::new(scout, viper),
+            player1: PlayerArea::new((*scout).clone(), (*viper).clone()),
+            player2: PlayerArea::new((*scout).clone(), (*viper).clone()),
             current_player: Player1,
             trade_row: CardStack::empty(),
             explorers: 10,
             scrapped: CardStack::empty(),
             trade_row_stack: {
-                let mut stack = CardStack::new(deck_cards);
+                let mut stack = CardStack::new(card_library.get_new_trade_stack());
                 stack.shuffle();
                 stack
             },
+            card_library: card_library.clone(),
         };
         gs.fill_trade_row();
         gs
@@ -196,7 +216,7 @@ impl GameState {
     fn fill_trade_row(&mut self) {
         // todo: number of cards in trade row hard-coded
         let left = 5 - self.trade_row.len();
-        for i in 0..left {
+        for _ in 0..left {
             match self.trade_row_stack.draw() {
                 None => break,
                 Some(card) => self.trade_row.add(card)
@@ -205,14 +225,26 @@ impl GameState {
     }
     fn get_current_player(&self) -> &PlayerArea {
         match &self.current_player {
-            Player1 => &self.player1,
-            Player2 => &self.player2,
+            Player::Player1 => &self.player1,
+            Player::Player2 => &self.player2,
         }
     }
     fn get_current_player_mut(&mut self) -> &mut PlayerArea {
         match &self.current_player {
             Player1 => &mut self.player1,
             Player2 => &mut self.player2,
+        }
+    }
+    fn get_current_opponent(&self) -> &PlayerArea {
+        match &self.current_player {
+            Player1 => &self.player2,
+            Player2 => &self.player1
+        }
+    }
+    fn get_current_opponent_mut(&mut self) -> &mut PlayerArea {
+        match &self.current_player {
+            Player1 => &mut self.player2,
+            Player2 => &mut self.player1
         }
     }
     fn turn_is_player1(&self) -> bool {
@@ -228,27 +260,56 @@ impl GameState {
 
 /// Effects!
 
-pub type ConfigError = &'static str;
-pub type ActionFunc = Box<dyn FnMut(&mut GameState, u8) -> Option<ConfigError>>;
+pub type ConfigError = String;
+pub type ActionFunc = Box<dyn FnMut(&mut GameState, u32) -> Failure<ConfigError>>;
 
 pub struct ActionMeta {
-    description: &'static str,
-    config_description: Option<HashMap<u8, &'static str>>,
+    /// description of the action, (probably?) user-friendly
+    description: String,
+    config: Option<Config>
+}
+pub struct Config {
+    /// dev-friendly description for each of the config values
+    description: Box<dyn Fn(u32) -> String>,
+    /// enum that shows how to get the config value (u32)
+    config_method: ActionConfigMethod
+}
+//todo: are there any instances where a Range or Set would be used, and need to specify which
+// player picks the config? If so, there should be a "by" player abstracted into Config as
+// a sibling to ActionConfigMethod
+pub enum ActionConfigMethod {
+    /// low: u32, high: u32
+    /// config should be a number in the range (low..high)
+    Range(u32, u32),
+    /// set: contains all the id's that can be used
+    Set(HashSet<u32>), // in this set of numbers
+    /// num: u32, by: Player, from: Player
+    /// num = number of cards to pick
+    /// by = player that is picking the cards
+    /// from = player that is having cards be picked from
+    /// config should be a bitwise-encoded number representing the cards that can be selected
+    PickHandCards(u32, RelativePlayer, RelativePlayer),
+    /// config should be the id of the card that can be picked
+    /// by: Player, from: player
+    /// by = player that is picking the cards
+    /// from = player that is having cards be picked from
+    PickHandCard(RelativePlayer, RelativePlayer),
+    PickTradeRowCards(u32, RelativePlayer)
 }
 
-pub type ConditionFunc = Box<dyn FnMut(&GameState, u8) -> bool>;
+pub type ConditionFunc = Box<dyn FnMut(&GameState, u32) -> bool>;
 
 pub fn validate_condition(name: &str) -> Option<String> {
     match get_condition(name) {
         Some(_) => None,
-        None => format!("Invalid condition: {}", name)
+        None => Some(format!("Invalid condition: {}", name))
     }
 }
 
 pub fn validate_action(name: &str) -> Option<String> {
     match get_action(name) {
         Some(_) => None,
-        None => format!("Invalid action: {}", name)
+        None => Some(format!("Invalid action: {}", name))
     }
 }
 
@@ -300,7 +361,10 @@ pub fn get_action(name: &str) -> Option<(ActionMeta, ActionFunc)> {
             let action = get_good_action(goods);
             Some(
                 (
-                    ActionMeta { description: "gives some amount of trade, authority, and combat", config_description: None },
+                    ActionMeta {
+                        description: "gives some amount of trade, authority, and combat".to_string(),
+                        config: None
+                    },
                     action
                 )
             )
@@ -309,14 +373,13 @@ pub fn get_action(name: &str) -> Option<(ActionMeta, ActionFunc)> {
         }
     }
     match name {
-        "test" => {
-            Some(
+        "test" => Some(
                 (
                     ActionMeta {
-                        description: "test",
-                        config_description: None,
+                        description: "test".to_string(),
+                        config: None,
                     },
-                    Box::new(|game: &mut GameState, _: u8| {
+                    Box::new(|game: &mut GameState, _| {
                         game.player1.discard.add(Card {
                             cost: 255,
                             name: String::from("bazinga"),
@@ -324,36 +387,79 @@ pub fn get_action(name: &str) -> Option<(ActionMeta, ActionFunc)> {
                             synergizes_with: HashSet::new(),
                             effects: HashSet::new(),
                         });
-                        None
+                        Success
                     })
-                ))
-        }
+                )
+        ),
+        "discard" => Some(
+            (
+                ActionMeta {
+                    description: "opponent discards a card".to_string(),
+                    config: Some(Config {
+                        description: Box::new(|_| "hand id of card to be discarded".to_string()),
+                        config_method: ActionConfigMethod::PickHandCard(Opponent, Opponent)
+                    })
+                },
+                Box::new(|game: &mut GameState, cfg| {
+                    let opponent = game.get_current_opponent_mut();
+                    match opponent.hand_id.get(&cfg) {
+                        None => Failure::Failure(format!("No card with id {}", &cfg)),
+                        Some((_, card_status)) => if card_status.in_play {
+                            Failure::Failure(
+                                format!("Card is in play, player must discard from hand \
+                                that has not been revealed"))
+                        } else if let Failure::Failure(msg) = opponent.discard_by_id(&cfg) {
+                            Failure::Failure(format!("unable to discard hand id {} in opponents hand: {}", &cfg, msg))
+                        } else {
+                            Success
+                        }
+                    }
+                })
+            )
+        ),
+        "destroy target base" => Some(
+            (
+                ActionMeta {
+                    description: "destroy any of the opponents bases".to_string(),
+                    config: Some(Config {
+                        description: Box::new(|_| "hand id of the base to be destroyed".to_string()),
+                        config_method: ActionConfigMethod::PickHandCard(RelativePlayer::Current, RelativePlayer::Opponent)
+                    }),
+                },
+                Box::new(|game: &mut GameState, cfg| {
+                    let opponent = game.get_current_opponent_mut();
+                    match opponent.hand_id.get(&cfg) {
+                        None => Failure::Failure(format!("No card with id {}", &cfg)),
+                        Some((card, card_status)) => {
+                            if !&card_status.in_play {
+                                Failure::Failure(format!("Card {} must be in play!", &card.name))
+                            } else if let None = &card.base {
+                                Failure::Failure(format!("Card {} is not a base!", &card.name))
+                            } else {
+                                match opponent.discard_by_id(&cfg) {
+                                    Success => Success,
+                                    Failure::Failure(msg) => Failure::Failure(format!("Unable to discard this card because: {}", msg))
+                                }
+                            }
+                        }
+                    }
+                })
+            )
+        ),
         _ => None
     }
 }
 
 pub fn get_good_action(goods: Goods) -> ActionFunc {
-    Box::new(move |game: &mut GameState, _: u8| {
+    Box::new(move |game: &mut GameState, _| {
         game.get_current_player_mut().goods += goods;
-        None
+        Success
     })
 }
 
 impl ActionMeta {
-    pub fn get_all_configs(&self) -> HashSet<&u8> {
-        match &self.config_description {
-            None => HashSet::new(),
-            Some(cs) => {
-                let mut h = HashSet::new();
-                for (c, _) in cs {
-                    h.insert(c);
-                }
-                h
-            }
-        }
-    }
     pub fn no_config(&self) -> bool {
-        self.config_description.is_none()
+        self.config.is_none()
     }
 }
 

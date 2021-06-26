@@ -1,23 +1,24 @@
 #![allow(dead_code)]
-
 mod game;
 mod parse;
 
 #[cfg(test)]
 mod tests {
-    use crate::game::{Stack, Goods, validate_card_effects, assert_validate_card_effects};
-    use crate::parse::{parse_file, parse_card, parse_goods};
-    use yaml_rust::{YamlLoader};
-    use yaml_rust::yaml::Yaml::Hash;
-    use crate::game::components::card::Card;
-    use crate::game::components::card::Base;
     use std::collections::HashSet;
+
+    use yaml_rust::YamlLoader;
+    use yaml_rust::yaml::Yaml::Hash;
+
+    use crate::game::{assert_validate_card_effects, Goods, Stack};
+    use crate::game::components::card::Base;
+    use crate::game::components::card::Card;
     use crate::game::components::faction::Faction;
+    use crate::parse::{parse_card, parse_file, parse_goods};
 
     #[test]
     fn test_shuffle() {
         print_long_message("testing shuffle");
-        for i in 0..10 {
+        for _ in 0..10 {
             let mut stack = Stack::new((1..5).collect());
             stack.shuffle();
             println!("{:?}", stack);
@@ -111,7 +112,7 @@ card2:
                 set
             },
         });
-        assert!(validate_card_effects(&card));
+        assert_validate_card_effects(&card);
     }
 
     #[test]
@@ -141,7 +142,7 @@ card2:
                 set
             },
             effects: {
-                let mut set = HashSet::new();
+                let set = HashSet::new();
                 set
             },
         });

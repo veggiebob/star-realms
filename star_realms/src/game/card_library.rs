@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use crate::game::Stack;
 use std::rc::Rc;
 
-struct CardLibrary {
+pub struct CardLibrary {
     all_cards: Vec<Rc<Card>>,
     card_map: HashMap<String, Rc<Card>>,
     trade_stack: Stack<Rc<Card>>
 }
 
 impl CardLibrary {
-    fn new(trade_stack: Vec<Card>, misc_cards: Vec<Card>) -> Result<CardLibrary, String> {
+    pub fn new(trade_stack: Vec<Card>, misc_cards: Vec<Card>) -> Result<CardLibrary, String> {
         let misc_cards: Vec<Rc<Card>> = {
             let mut tmp = vec![];
             for card in misc_cards {
@@ -64,20 +64,28 @@ impl CardLibrary {
         }
     }
 
-    fn get_card_by_name(&self, name: &str) -> Option<Rc<Card>> {
+    pub fn get_new_trade_stack(&self) -> Vec<Card> {
+        let mut vec = vec![];
+        for card in self.trade_stack.elements.iter() {
+            vec.push((**card).clone());
+        }
+        vec
+    }
+
+    pub fn get_card_by_name(&self, name: &str) -> Option<Rc<Card>> {
         match self.card_map.get(name) {
             Some(card) => Some(Rc::clone(card)),
             None => None
         }
     }
 
-    fn get_scout(&self) -> Option<Rc<Card>> {
+    pub fn get_scout(&self) -> Option<Rc<Card>> {
         self.get_card_by_name("scout")
     }
-    fn get_viper(&self) -> Option<Rc<Card>> {
+    pub fn get_viper(&self) -> Option<Rc<Card>> {
         self.get_card_by_name("viper")
     }
-    fn get_explorer(&self) -> Option<Rc<Card>> {
+    pub fn get_explorer(&self) -> Option<Rc<Card>> {
         self.get_card_by_name("explorer")
     }
 }

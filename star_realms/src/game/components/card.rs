@@ -12,6 +12,7 @@ pub struct Card {
 }
 
 pub struct CardStatus {
+    pub in_play: bool,
     pub effects_used: HashSet<(String, String)>,
     pub scrapped: bool
 }
@@ -25,11 +26,15 @@ pub enum Base {
 impl CardStatus {
     pub fn new() -> CardStatus {
         CardStatus {
+            in_play: false,
             effects_used: HashSet::new(),
             scrapped: false
         }
     }
-    pub fn all_effects_used() -> bool {
+    pub fn reveal(&mut self) {
+        self.in_play = true;
+    }
+    pub fn all_effects_used(&self) -> bool {
         todo!("CardStatus::all_effects_used")
     }
 }

@@ -5,6 +5,6 @@ port_of_call:
   base: true
   outpost: true
   defense: 6
-  effects: # need relational structures
+  effects:
     - trash: draw
-    - trash: destroy_target_base
+    - trash: destroy target base
