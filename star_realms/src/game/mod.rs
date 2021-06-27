@@ -2,85 +2,25 @@ extern crate rand;
 extern crate regex;
 
 use std::collections::{HashMap, HashSet};
-use std::ops::{Add, AddAssign};
+use std::rc::Rc;
 
+use components::stack::Stack;
+
+use crate::game::card_library::CardLibrary;
 use crate::game::components::{Authority, Coin, Combat};
-use crate::game::components::card::{Base, Card, CardStatus};
-use crate::game::Player::Player1;
-use crate::parse::parse_goods;
+use crate::game::components::card::{Card, CardStatus};
+use crate::game::util::Failure;
 
 use self::rand::Rng;
-use crate::game::util::Failure;
-use crate::game::util::Failure::Success;
-use crate::game::RelativePlayer::Opponent;
-use crate::game::card_library::CardLibrary;
-use std::rc::Rc;
+use crate::game::effects::{ConfigSupplier, get_condition, get_action};
+use crate::game::util::Failure::{Succeed, Fail};
 
 pub mod components;
 pub mod card_library;
+pub mod effects;
 mod util;
 
 type CardStack = Stack<Card>;
-
-#[derive(Debug)]
-pub struct Stack<T> {
-    elements: Vec<T>,
-}
-
-impl<T> Stack<T> {
-    pub fn new(elements: Vec<T>) -> Stack<T> {
-        Stack {
-            elements
-        }
-    }
-    pub fn empty() -> Stack<T> {
-        Stack {
-            elements: vec![]
-        }
-    }
-    pub fn len(&self) -> usize {
-        self.elements.len()
-    }
-    pub fn add(&mut self, element: T) {
-        self.elements.push(element);
-    }
-
-    /// we say that the "top" card is the last index card
-    pub fn draw(&mut self) -> Option<T> {
-        if self.len() == 0 {
-            None
-        } else {
-            Some(self.elements.remove(self.elements.len() - 1))
-        }
-    }
-    pub fn shuffle(&mut self) {
-        if self.len() < 2 {
-            return;
-        }
-        let mut new_stack: Stack<T> = Stack::empty();
-        let mut rng = rand::thread_rng();
-
-        // move all the elements into a different stack
-        let max_len = self.elements.len();
-        for i in (0..max_len).rev() {
-            new_stack.add(self.elements.remove(i));
-        }
-
-        // replace them randomly
-        for i in 0..max_len {
-            let r = rng.gen_range(0..max_len - i);
-            self.add(new_stack.elements.remove(r));
-        }
-    }
-
-    /// draw a card from self and place it in other
-    pub fn draw_to(&mut self, other: &mut Stack<T>) {
-        match self.draw() {
-            None => (),
-            Some(card) => other.add(card),
-        }
-    }
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Goods {
@@ -97,11 +37,21 @@ pub struct PlayerArea {
     goods: Goods,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Player {
     Player1,
     Player2,
 }
+impl Player {
+    pub fn reverse(&self) -> Player {
+        match self {
+            Player::Player1 => Player::Player2,
+            Player::Player2 => Player::Player1
+        }
+    }
+}
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum RelativePlayer {
     Current,
     Opponent
@@ -118,8 +68,24 @@ pub struct GameState {
     card_library: Rc<CardLibrary>,
 }
 
+pub enum Feedback {
+    Invalid(String),
+    Info(String),
+}
+
+pub enum UserActionIntent<T> {
+    Continue(T),
+    Finish
+}
+pub trait UserActionSupplier {
+    fn select_effect(&self, game: &GameState) -> UserActionIntent<(u32, (String, String))>;
+    fn select_card(&self, game: &GameState, from_who: &RelativePlayer) -> u32;
+    fn select_cards(&self, game: &GameState, from_who: &RelativePlayer) -> HashSet<u32>;
+    fn on_feedback(&self, feedback: Feedback);
+}
+
 impl PlayerArea {
-    pub fn new(scout: Card, viper: Card) -> PlayerArea {
+    pub fn new(scout: Card, viper: Card, first: bool) -> PlayerArea {
         let mut pa = PlayerArea {
             discard: CardStack::empty(),
             deck: CardStack::empty(),
@@ -138,14 +104,23 @@ impl PlayerArea {
             pa.deck.add(viper.clone());
         }
         pa.deck.shuffle();
+        if first {
+            // todo: hardcoded
+            pa.draw_hand(3);
+        } else {
+            pa.draw_hand(5);
+        }
         pa
     }
     pub fn get_card_in_hand(&self, id: &u32) -> Option<&(Card, CardStatus)> {
         self.hand_id.get(id)
     }
-    pub fn draw_hand(&mut self) {
+    pub fn get_card_in_hand_mut(&mut self, id: &u32) -> Option<&mut (Card, CardStatus)> {
+        self.hand_id.get_mut(id)
+    }
+    pub fn draw_hand(&mut self, num_cards: u8) {
         let mut id_index = 0;
-        for _ in 0..5 {
+        for _ in 0..num_cards {
             let card = self.draw();
             while self.hand_id.contains_key(&id_index) {
                 id_index += 1;
@@ -163,7 +138,7 @@ impl PlayerArea {
             tmp
         };
         for id in keys_vec {
-            if let Failure::Failure(_) = self.discard_by_id(&id) {
+            if let Failure::Fail(_) = self.discard_by_id(&id) {
                 panic!("PlayerArea::discard_hand: id {} is not in hand_id somehow", id);
             }
         }
@@ -172,9 +147,9 @@ impl PlayerArea {
         match self.hand_id.remove(id) {
             Some((card, _)) => {
                 self.discard.add(card);
-                Failure::Success
+                Failure::Succeed
             },
-            None => Failure::Failure(format!("cannot discard card by id {}!", id))
+            None => Failure::Fail(format!("cannot discard card by id {}!", id))
         }
     }
     fn draw(&mut self) -> Card {
@@ -197,9 +172,9 @@ impl GameState {
         let scout = card_library.get_scout().expect("card library needs a scout!");
         let viper = card_library.get_viper().expect("card library needs a viper!");
         let mut gs = GameState {
-            player1: PlayerArea::new((*scout).clone(), (*viper).clone()),
-            player2: PlayerArea::new((*scout).clone(), (*viper).clone()),
-            current_player: Player1,
+            player1: PlayerArea::new((*scout).clone(), (*viper).clone(), true),
+            player2: PlayerArea::new((*scout).clone(), (*viper).clone(), false),
+            current_player: Player::Player1,
             trade_row: CardStack::empty(),
             explorers: 10,
             scrapped: CardStack::empty(),
@@ -210,12 +185,12 @@ impl GameState {
             },
             card_library: card_library.clone(),
         };
-        gs.fill_trade_row();
+        // todo: number of cards in trade row hard-coded
+        gs.fill_trade_row(5);
         gs
     }
-    fn fill_trade_row(&mut self) {
-        // todo: number of cards in trade row hard-coded
-        let left = 5 - self.trade_row.len();
+    fn fill_trade_row(&mut self, num: usize) {
+        let left = num - self.trade_row.len();
         for _ in 0..left {
             match self.trade_row_stack.draw() {
                 None => break,
@@ -223,262 +198,130 @@ impl GameState {
             }
         }
     }
-    fn get_current_player(&self) -> &PlayerArea {
+    fn flip_turn(&mut self) {
+        self.current_player = match self.current_player {
+            Player::Player1 => Player::Player2,
+            Player::Player2 => Player::Player1
+        }
+    }
+    pub fn resolve_relative(&self, relative_player: &RelativePlayer) -> Player {
+        match relative_player {
+            RelativePlayer::Current => self.current_player.clone(),
+            RelativePlayer::Opponent => self.current_player.reverse()
+        }
+    }
+    pub fn resolve_relative_player(&self, relative_player: &RelativePlayer) -> &PlayerArea {
+        match relative_player {
+            RelativePlayer::Current => self.get_current_player(),
+            RelativePlayer::Opponent => self.get_current_opponent()
+        }
+    }
+
+    pub fn resolve_relative_player_mut(&mut self, relative_player: &RelativePlayer) -> &mut PlayerArea {
+        match relative_player {
+            RelativePlayer::Current => self.get_current_player_mut(),
+            RelativePlayer::Opponent => self.get_current_opponent_mut()
+        }
+    }
+    pub fn get_current_player(&self) -> &PlayerArea {
         match &self.current_player {
             Player::Player1 => &self.player1,
             Player::Player2 => &self.player2,
         }
     }
-    fn get_current_player_mut(&mut self) -> &mut PlayerArea {
+    pub fn get_current_player_mut(&mut self) -> &mut PlayerArea {
         match &self.current_player {
-            Player1 => &mut self.player1,
-            Player2 => &mut self.player2,
+            Player::Player1 => &mut self.player1,
+            Player::Player2 => &mut self.player2,
         }
     }
-    fn get_current_opponent(&self) -> &PlayerArea {
+    pub fn get_current_opponent(&self) -> &PlayerArea {
         match &self.current_player {
-            Player1 => &self.player2,
-            Player2 => &self.player1
+            Player::Player1 => &self.player2,
+            Player::Player2 => &self.player1
         }
     }
-    fn get_current_opponent_mut(&mut self) -> &mut PlayerArea {
+    pub fn get_current_opponent_mut(&mut self) -> &mut PlayerArea {
         match &self.current_player {
-            Player1 => &mut self.player2,
-            Player2 => &mut self.player1
+            Player::Player1 => &mut self.player2,
+            Player::Player2 => &mut self.player1
         }
     }
-    fn turn_is_player1(&self) -> bool {
+    pub fn turn_is_player1(&self) -> bool {
         match &self.current_player {
-            Player1 => true,
-            Player2 => false
+            Player::Player1 => true,
+            Player::Player2 => false
         }
     }
-    fn turn_is_player2(&self) -> bool {
+    pub fn turn_is_player2(&self) -> bool {
         !self.turn_is_player1()
     }
-}
 
-/// Effects!
 
-pub type ConfigError = String;
-pub type ActionFunc = Box<dyn FnMut(&mut GameState, u32) -> Failure<ConfigError>>;
-
-pub struct ActionMeta {
-    /// description of the action, (probably?) user-friendly
-    description: String,
-    config: Option<Config>
-}
-pub struct Config {
-    /// dev-friendly description for each of the config values
-    description: Box<dyn Fn(u32) -> String>,
-    /// enum that shows how to get the config value (u32)
-    config_method: ActionConfigMethod
-}
-//todo: are there any instances where a Range or Set would be used, and need to specify which
-// player picks the config? If so, there should be a "by" player abstracted into Config as
-// a sibling to ActionConfigMethod
-pub enum ActionConfigMethod {
-    /// low: u32, high: u32
-    /// config should be a number in the range (low..high)
-    Range(u32, u32),
-    /// set: contains all the id's that can be used
-    Set(HashSet<u32>), // in this set of numbers
-    /// num: u32, by: Player, from: Player
-    /// num = number of cards to pick
-    /// by = player that is picking the cards
-    /// from = player that is having cards be picked from
-    /// config should be a bitwise-encoded number representing the cards that can be selected
-    PickHandCards(u32, RelativePlayer, RelativePlayer),
-    /// config should be the id of the card that can be picked
-    /// by: Player, from: player
-    /// by = player that is picking the cards
-    /// from = player that is having cards be picked from
-    PickHandCard(RelativePlayer, RelativePlayer),
-    PickTradeRowCards(u32, RelativePlayer)
-}
-
-pub type ConditionFunc = Box<dyn FnMut(&GameState, u32) -> bool>;
-
-pub fn validate_condition(name: &str) -> Option<String> {
-    match get_condition(name) {
-        Some(_) => None,
-        None => Some(format!("Invalid condition: {}", name))
-    }
-}
-
-pub fn validate_action(name: &str) -> Option<String> {
-    match get_action(name) {
-        Some(_) => None,
-        None => Some(format!("Invalid action: {}", name))
-    }
-}
-
-pub fn validate_effect((cond, act): (&str, &str)) -> Option<String> {
-    match validate_condition(cond) {
-        None => match validate_action(act) {
-            None => None,
-            x => x
-        },
-        x => x,
-    }
-}
-
-/// None -> valid
-/// String -> invalid, with reason
-pub fn validate_card_effects(card: &Card) -> Option<String> {
-    for (l, r) in card.effects.iter() {
-        if let Some(e) = validate_effect((l.as_str(), r.as_str())) {
-            return Some(e)
-        }
-    }
-    None
-}
-
-pub fn assert_validate_card_effects(card: &Card) {
-    if let Some(e) = validate_card_effects(&card) {
-        panic!("{} was not a valid card because '{}': {:?}", card.name, e, card);
-    }
-}
-
-pub fn get_condition(name: &str) -> Option<ConditionFunc> {
-    match name {
-        "any" => Some(Box::new(|_, _| true)),
-        "trash" => Some(Box::new(
-            |game, id| {
-                game.get_current_player().hand_id.get(&id)
-                    .expect("trash condition: bad id supplied")
-                    .1.scrapped
-            }
-        )),
-        _ => None
-    }
-}
-
-pub fn get_action(name: &str) -> Option<(ActionMeta, ActionFunc)> {
-    // signal to be a good
-    if name.starts_with("G") {
-        return if let Some(goods) = parse_goods(name) {
-            let action = get_good_action(goods);
-            Some(
-                (
-                    ActionMeta {
-                        description: "gives some amount of trade, authority, and combat".to_string(),
-                        config: None
-                    },
-                    action
-                )
-            )
-        } else {
-            None
-        }
-    }
-    match name {
-        "test" => Some(
-                (
-                    ActionMeta {
-                        description: "test".to_string(),
-                        config: None,
-                    },
-                    Box::new(|game: &mut GameState, _| {
-                        game.player1.discard.add(Card {
-                            cost: 255,
-                            name: String::from("bazinga"),
-                            base: Some(Base::Outpost(4)),
-                            synergizes_with: HashSet::new(),
-                            effects: HashSet::new(),
-                        });
-                        Success
-                    })
-                )
-        ),
-        "discard" => Some(
-            (
-                ActionMeta {
-                    description: "opponent discards a card".to_string(),
-                    config: Some(Config {
-                        description: Box::new(|_| "hand id of card to be discarded".to_string()),
-                        config_method: ActionConfigMethod::PickHandCard(Opponent, Opponent)
-                    })
-                },
-                Box::new(|game: &mut GameState, cfg| {
-                    let opponent = game.get_current_opponent_mut();
-                    match opponent.hand_id.get(&cfg) {
-                        None => Failure::Failure(format!("No card with id {}", &cfg)),
-                        Some((_, card_status)) => if card_status.in_play {
-                            Failure::Failure(
-                                format!("Card is in play, player must discard from hand \
-                                that has not been revealed"))
-                        } else if let Failure::Failure(msg) = opponent.discard_by_id(&cfg) {
-                            Failure::Failure(format!("unable to discard hand id {} in opponents hand: {}", &cfg, msg))
-                        } else {
-                            Success
-                        }
-                    }
-                })
-            )
-        ),
-        "destroy target base" => Some(
-            (
-                ActionMeta {
-                    description: "destroy any of the opponents bases".to_string(),
-                    config: Some(Config {
-                        description: Box::new(|_| "hand id of the base to be destroyed".to_string()),
-                        config_method: ActionConfigMethod::PickHandCard(RelativePlayer::Current, RelativePlayer::Opponent)
-                    }),
-                },
-                Box::new(|game: &mut GameState, cfg| {
-                    let opponent = game.get_current_opponent_mut();
-                    match opponent.hand_id.get(&cfg) {
-                        None => Failure::Failure(format!("No card with id {}", &cfg)),
-                        Some((card, card_status)) => {
-                            if !&card_status.in_play {
-                                Failure::Failure(format!("Card {} must be in play!", &card.name))
-                            } else if let None = &card.base {
-                                Failure::Failure(format!("Card {} is not a base!", &card.name))
-                            } else {
-                                match opponent.discard_by_id(&cfg) {
-                                    Success => Success,
-                                    Failure::Failure(msg) => Failure::Failure(format!("Unable to discard this card because: {}", msg))
-                                }
+    /// A Result::Err(Feedback::Invalid) represents an *internal failure* that should be
+    ///     reported to the client, such as a bad config
+    /// A Result::Err(Feedback::Info) represents an incomplete process that should be
+    ///     reported to the client and the user.
+    /// A Result::Ok(Option::Some) represents a successful operation that should be reported
+    ///     to the user.
+    /// A Result::Ok(Option::None) represents a successful operation that does not require comment.
+    pub fn advance<T>(&mut self, client: T) -> Result<Option<String>, Feedback>
+        where T: ConfigSupplier + UserActionSupplier {
+        if let UserActionIntent::Continue((card_id, (cond_s, act_s)))
+                // select to either exit, or continue with an effect
+            = client.select_effect(self) {
+            // then parse the condition and action of this effect
+            let mut cond = get_condition(cond_s.clone())
+                .expect(
+                    format!(
+                        "GameState.advance(): bad selection condition {}", &cond_s)
+                        .as_str());
+            let (action_meta, mut action_func) = get_action(&act_s)
+                .expect(
+                    format!("GameState.advance(): bad selection action {}", &act_s)
+                        .as_str());
+            // evaluate the condition
+            if cond(self, card_id) {
+                // if true, run the action
+                match action_func(self,
+                               match action_meta.config {
+                                   Some(config) => client.get_config(self, &config),
+                                   _ => 0,
+                               }) {
+                    // if the action fails, then a bad config was passed in.
+                    // perhaps we can report these better
+                    Fail(msg) => Err(Feedback::Invalid(
+                        format!(
+                            "Unable to complete action to {}. {}",
+                            action_meta.description.clone(),
+                            msg)
+                    )),
+                    // if it succeeds, make sure to consume the effect
+                    Succeed => {
+                        match self.get_current_player_mut().get_card_in_hand_mut(&card_id) {
+                            Some((_, card_status)) => {
+                                card_status.use_effect(&(cond_s, act_s));
+                                Ok(None)
                             }
+                            None => Err(
+                                Feedback::Invalid(
+                                    format!(
+                                        "Card id {} is not one of {:?}",
+                                        card_id,
+                                        self.get_current_player().hand_id.keys())))
                         }
                     }
-                })
-            )
-        ),
-        _ => None
-    }
-}
-
-pub fn get_good_action(goods: Goods) -> ActionFunc {
-    Box::new(move |game: &mut GameState, _| {
-        game.get_current_player_mut().goods += goods;
-        Success
-    })
-}
-
-impl ActionMeta {
-    pub fn no_config(&self) -> bool {
-        self.config.is_none()
-    }
-}
-
-impl Add for Goods {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Goods {
-            trade: self.trade + rhs.trade,
-            authority: self.authority + rhs.authority,
-            combat: self.combat + rhs.combat,
+                }
+            } else {
+                // if the condition is not true, report the mistake to the client, or user?
+                Err(Feedback::Info("This effect is not possible at the moment.".to_string()))
+            }
+        } else {
+            // the client chooses to exit, and hand over the turn.
+            // todo: warn them if they haven't completed all their effects
+            // todo: automatically exit turn if all effects have been completed
+            self.flip_turn();
+            Ok(None)
         }
-    }
-}
-
-impl AddAssign for Goods {
-    fn add_assign(&mut self, rhs: Self) {
-        self.trade += rhs.trade;
-        self.authority += rhs.authority;
-        self.combat += rhs.combat;
     }
 }

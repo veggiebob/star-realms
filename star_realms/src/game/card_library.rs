@@ -1,6 +1,6 @@
 use crate::game::components::card::Card;
 use std::collections::HashMap;
-use crate::game::Stack;
+use crate::game::components::stack::Stack;
 use std::rc::Rc;
 
 pub struct CardLibrary {
@@ -66,7 +66,7 @@ impl CardLibrary {
 
     pub fn get_new_trade_stack(&self) -> Vec<Card> {
         let mut vec = vec![];
-        for card in self.trade_stack.elements.iter() {
+        for card in self.trade_stack.iter() {
             vec.push((**card).clone());
         }
         vec

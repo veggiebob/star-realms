@@ -6,13 +6,15 @@ mod parse;
 mod tests {
     use std::collections::HashSet;
 
-    use yaml_rust::YamlLoader;
     use yaml_rust::yaml::Yaml::Hash;
+    use yaml_rust::YamlLoader;
 
-    use crate::game::{assert_validate_card_effects, Goods, Stack};
     use crate::game::components::card::Base;
     use crate::game::components::card::Card;
     use crate::game::components::faction::Faction;
+    use crate::game::components::stack::Stack;
+    use crate::game::effects::assert_validate_card_effects;
+    use crate::game::Goods;
     use crate::parse::{parse_card, parse_file, parse_goods};
 
     #[test]

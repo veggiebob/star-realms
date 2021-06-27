@@ -37,6 +37,9 @@ impl CardStatus {
     pub fn all_effects_used(&self) -> bool {
         todo!("CardStatus::all_effects_used")
     }
+    pub fn use_effect(&mut self, effect: &(String, String)) {
+        self.effects_used.insert(effect.clone());
+    }
 }
 
 impl Base {
