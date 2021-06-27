@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-mod game;
+pub mod game;
 mod parse;
 
 #[cfg(test)]

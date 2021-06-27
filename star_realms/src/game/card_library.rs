@@ -2,6 +2,7 @@ use crate::game::components::card::Card;
 use std::collections::HashMap;
 use crate::game::components::stack::Stack;
 use std::rc::Rc;
+use crate::parse::parse_file;
 
 pub struct CardLibrary {
     all_cards: Vec<Rc<Card>>,
@@ -10,6 +11,12 @@ pub struct CardLibrary {
 }
 
 impl CardLibrary {
+    pub fn from_config(config_folder: &str) -> Result<CardLibrary, String> {
+        let trade_cards = parse_file(format!("{}/trade_cards.yaml", config_folder))?;
+        let misc_cards = parse_file(format!("{}/misc_cards.yaml", config_folder))?;
+        CardLibrary::new(trade_cards, misc_cards)
+    }
+
     pub fn new(trade_stack: Vec<Card>, misc_cards: Vec<Card>) -> Result<CardLibrary, String> {
         let misc_cards: Vec<Rc<Card>> = {
             let mut tmp = vec![];

@@ -168,7 +168,7 @@ impl PlayerArea {
 impl GameState {
     /// panics if there is no scout or viper
     /// this is helpful https://www.starrealms.com/sets-and-expansions/
-    fn new (card_library: Rc<CardLibrary>) -> GameState {
+    pub fn new (card_library: Rc<CardLibrary>) -> GameState {
         let scout = card_library.get_scout().expect("card library needs a scout!");
         let viper = card_library.get_viper().expect("card library needs a viper!");
         let mut gs = GameState {
@@ -189,6 +189,12 @@ impl GameState {
         gs.fill_trade_row(5);
         gs
     }
+
+    pub fn from_config(config_folder: &str) -> Result<GameState, String> {
+        let cl = CardLibrary::from_config(config_folder)?;
+        Ok(GameState::new(Rc::new(cl)))
+    }
+
     fn fill_trade_row(&mut self, num: usize) {
         let left = num - self.trade_row.len();
         for _ in 0..left {
@@ -265,7 +271,7 @@ impl GameState {
     /// A Result::Ok(Option::Some) represents a successful operation that should be reported
     ///     to the user.
     /// A Result::Ok(Option::None) represents a successful operation that does not require comment.
-    pub fn advance<T>(&mut self, client: T) -> Result<Option<String>, Feedback>
+    pub fn advance<T>(&mut self, client: &T) -> Result<Option<String>, Feedback>
         where T: ConfigSupplier + UserActionSupplier {
         if let UserActionIntent::Continue((card_id, (cond_s, act_s)))
                 // select to either exit, or continue with an effect
