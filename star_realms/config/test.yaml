@@ -1,9 +1,11 @@
 card1:
+  cost: 1
   base: false
   synergy:
     - m
     - f
 card2:
+  cost: 2
   base: true
   outpost: false
   defense: 6

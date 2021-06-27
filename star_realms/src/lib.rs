@@ -1,23 +1,26 @@
 #![allow(dead_code)]
-
 mod game;
 mod parse;
 
 #[cfg(test)]
 mod tests {
-    use crate::game::{Stack, Goods, validate_card};
-    use crate::parse::{parse_file, parse_card, parse_goods};
-    use yaml_rust::{YamlLoader};
-    use yaml_rust::yaml::Yaml::Hash;
-    use crate::game::components::card::Card;
-    use crate::game::components::card::Base;
     use std::collections::HashSet;
+
+    use yaml_rust::yaml::Yaml::Hash;
+    use yaml_rust::YamlLoader;
+
+    use crate::game::components::card::Base;
+    use crate::game::components::card::Card;
     use crate::game::components::faction::Faction;
+    use crate::game::components::stack::Stack;
+    use crate::game::effects::assert_validate_card_effects;
+    use crate::game::Goods;
+    use crate::parse::{parse_card, parse_file, parse_goods};
 
     #[test]
     fn test_shuffle() {
         print_long_message("testing shuffle");
-        for i in 0..10 {
+        for _ in 0..10 {
             let mut stack = Stack::new((1..5).collect());
             stack.shuffle();
             println!("{:?}", stack);
@@ -54,6 +57,7 @@ card2:
         // print_long_message("testing card 1");
         let yaml = YamlLoader::load_from_str("\
 card1:
+  cost: 1
   base: false
   synergy:
     - m
@@ -63,6 +67,7 @@ card1:
         let card = parse_card("card1", yaml["card1"].clone()).unwrap();
         // println!("{:?}", card);
         assert_eq!(card, Card {
+            cost: 1,
             name: "card1".to_owned(),
             base: None,
             synergizes_with: {
@@ -80,6 +85,7 @@ card1:
         // print_long_message("testing card 2");
         let yaml = YamlLoader::load_from_str("\
 card2:
+  cost: 2
   base: true
   defense: 4
   outpost: true
@@ -87,12 +93,13 @@ card2:
     - s
     - f
   effects:
-    any: test
+    - any: test
         ");
         let yaml = &yaml.unwrap()[0];
         let card = parse_card("card2", yaml["card2"].clone()).unwrap();
-        println!("{:?}", card);
+        // println!("{:?}", card);
         assert_eq!(card, Card {
+            cost: 2,
             name: "card2".to_owned(),
             base: Some(Base::Outpost(4)),
             synergizes_with: {
@@ -107,7 +114,7 @@ card2:
                 set
             },
         });
-        assert!(validate_card(&card));
+        assert_validate_card_effects(&card);
     }
 
     #[test]
@@ -115,6 +122,7 @@ card2:
         let cards = parse_file("config/test.yaml".to_owned()).unwrap();
         assert_eq!(cards.len(), 2);
         assert_eq!(cards[0], Card {
+            cost: 1,
             name: "card1".to_owned(),
             base: None,
             effects: HashSet::new(),
@@ -126,6 +134,7 @@ card2:
             },
         });
         assert_eq!(cards[1], Card {
+            cost: 2,
             name: "card2".to_owned(),
             base: Some(Base::Base(6)),
             synergizes_with: {
@@ -135,10 +144,29 @@ card2:
                 set
             },
             effects: {
-                let mut set = HashSet::new();
+                let set = HashSet::new();
                 set
             },
         });
+        for card in cards.iter() {
+            assert_validate_card_effects(card);
+        }
+    }
+
+    #[test]
+    fn validate_misc_cards () {
+        let cards = parse_file("config/misc_cards.yaml".to_owned()).unwrap();
+        for card in cards.iter() {
+            assert_validate_card_effects(card);
+        }
+    }
+
+    #[test]
+    fn validate_trade_cards () {
+        let cards = parse_file("config/trade_cards.yaml".to_owned()).unwrap();
+        for card in cards.iter() {
+            assert_validate_card_effects(card);
+        }
     }
 
     #[test]
