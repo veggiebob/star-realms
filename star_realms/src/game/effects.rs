@@ -6,7 +6,6 @@ use crate::game::RelativePlayer::Opponent;
 use crate::game::components::card::{Base, Card};
 use std::collections::HashSet;
 use crate::parse::parse_goods;
-use crate::game::components::faction::Faction;
 
 /// Effects!
 
@@ -23,9 +22,9 @@ pub struct ActionMeta {
 
 pub struct Config {
     /// dev-friendly description for each of the config values
-    description: Box<dyn Fn(u32) -> String>,
+    pub description: Box<dyn Fn(u32) -> String>,
     /// enum that shows how to get the config value (u32)
-    config_method: ActionConfigMethod
+    pub config_method: ActionConfigMethod
 }
 
 pub trait ConfigSupplier {

@@ -11,7 +11,6 @@ use crate::game::components::{Authority, Coin, Combat};
 use crate::game::components::card::{Card, CardStatus};
 use crate::game::util::Failure;
 
-use self::rand::Rng;
 use crate::game::effects::{ConfigSupplier, get_condition, get_action};
 use crate::game::util::Failure::{Succeed, Fail};
 
@@ -55,6 +54,15 @@ impl Player {
 pub enum RelativePlayer {
     Current,
     Opponent
+}
+
+impl RelativePlayer {
+    pub fn to_string(&self) -> String {
+        match self {
+            RelativePlayer::Current => "current".to_string(),
+            _ => "opponent".to_string()
+        }
+    }
 }
 
 pub struct GameState {
@@ -111,6 +119,14 @@ impl PlayerArea {
             pa.draw_hand(5);
         }
         pa
+    }
+
+    pub fn get_all_hand_card_ids(&self) -> HashSet<u32> {
+        let mut set = HashSet::new();
+        for (k, _) in self.hand_id.iter() {
+            set.insert(*k);
+        }
+        set
     }
     pub fn get_card_in_hand(&self, id: &u32) -> Option<&(Card, CardStatus)> {
         self.hand_id.get(id)
