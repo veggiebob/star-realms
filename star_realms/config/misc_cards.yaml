@@ -4,12 +4,12 @@ scout:
   cost: 0
   base: false
   effects:
-    any: G0.0.1
+    - any: G0.0.1
 viper:
   cost: 0
   base: false
   effects:
-    any: G1.0.0
+    - any: G1.0.0
 explorer:
   cost: 2
   base: false

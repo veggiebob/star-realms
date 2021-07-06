@@ -1,9 +1,11 @@
 pub mod client;
 
+#[cfg(test)]
+pub mod test;
 pub mod main {
     extern crate star_realms;
 
-    use self::star_realms::game::GameState;
+    use self::star_realms::game::{GameState, Feedback};
     use crate::cl_client::client::Client;
 
     pub fn main () {
@@ -14,6 +16,18 @@ pub mod main {
         let client = Client {
             name: "user".to_string()
         };
-        let result = game.advance(&client);
+        println!("cl_client::main::main: Game is starting!");
+        loop {
+            let result = game.advance(&client);
+            match result {
+                Ok(msg) => println!("log: {}", msg),
+                Err(e) => {
+                    println!("Internal unrecoverable error.");
+                    println!("{}", e);
+                    break;
+                }
+            }
+        }
+        println!("cl_client::main::main: Game has ended!");
     }
 }

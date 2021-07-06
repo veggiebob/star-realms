@@ -55,7 +55,7 @@ pub enum ActionConfigMethod {
 }
 
 /// FnMut(game, hand_id /* of card */) -> bool
-pub type ConditionFunc = Box<dyn FnMut(&GameState, u32) -> bool>;
+pub type ConditionFunc = Box<dyn FnMut(&GameState, &u32) -> bool>;
 
 pub fn validate_condition(name: &String) -> Option<String> {
     match get_condition(name.clone()) {
@@ -103,7 +103,7 @@ pub fn get_condition(name: String) -> Option<ConditionFunc> {
         "any" | "free" => Some(Box::new(|_, _| true)),
         "trash" | "scrap" => Some(Box::new(
             |game, id| {
-                game.get_current_player().hand_id.get(&id)
+                game.get_current_player().hand_id.get(id)
                     .expect("trash condition: bad id supplied")
                     .1.scrapped
             }
@@ -112,7 +112,7 @@ pub fn get_condition(name: String) -> Option<ConditionFunc> {
                 let n = name.clone();
                 move |game, id| match &(n.as_str()[n.len()-1..].parse()) {
                     Ok(p) => game.get_current_player()
-                        .get_card_in_hand(&id)
+                        .get_card_in_hand(id)
                         .expect("synergy condition: bad id supplied")
                         .0.synergizes_with.contains(p),
                     Err(e) => panic!(format!("'{}' is not a valid condition! {}", &n, e))

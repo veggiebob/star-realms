@@ -11,6 +11,7 @@ pub struct Card {
     pub effects: HashSet<(String, String)> // relational structure
 }
 
+#[derive(Debug)]
 pub struct CardStatus {
     pub in_play: bool,
     pub effects_used: HashSet<(String, String)>,

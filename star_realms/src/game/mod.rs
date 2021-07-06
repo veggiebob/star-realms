@@ -20,6 +20,7 @@ pub mod effects;
 mod util;
 
 type CardStack = Stack<Card>;
+type HandId = u32;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Goods {
@@ -28,12 +29,36 @@ pub struct Goods {
     pub(crate) combat: Combat,
 }
 
+#[derive(Debug)]
 pub struct PlayerArea {
     discard: CardStack,
     deck: CardStack,
-    hand_id: HashMap<u32, (Card, CardStatus)>, // all cards in hand or in play (including bases)
+    hand_id: HashMap<HandId, (Card, CardStatus)>, // all cards in hand or in play (including bases)
+    turn_data: TurnData,
     scrapped: CardStack,
     goods: Goods,
+}
+
+#[derive(Debug)]
+pub struct TurnData {
+    to_be_scrapped: HashSet<HandId>,
+    to_be_discarded: HashSet<HandId>,
+    played_this_turn: HashSet<HandId>
+}
+
+impl TurnData {
+    pub fn new() -> TurnData {
+        TurnData {
+            to_be_scrapped: HashSet::new(),
+            to_be_discarded: HashSet::new(),
+            played_this_turn: HashSet::new()
+        }
+    }
+    pub fn reset(&mut self)  {
+        self.to_be_discarded = HashSet::new();
+        self.to_be_scrapped = HashSet::new();
+        self.played_this_turn = HashSet::new();
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -69,11 +94,11 @@ pub struct GameState {
     player1: PlayerArea,
     player2: PlayerArea,
     current_player: Player,
-    trade_row: CardStack,
-    explorers: u8,
-    scrapped: CardStack,
-    trade_row_stack: CardStack,
-    card_library: Rc<CardLibrary>,
+    pub trade_row: Stack<u32>,
+    pub explorers: u8,
+    pub scrapped: CardStack,
+    pub trade_row_stack: Stack<u32>,
+    pub card_library: Rc<CardLibrary>,
 }
 
 pub enum Feedback {
@@ -86,9 +111,12 @@ pub enum UserActionIntent<T> {
     Finish
 }
 pub trait UserActionSupplier {
+
     fn select_effect(&self, game: &GameState) -> UserActionIntent<(u32, (String, String))>;
-    fn select_card(&self, game: &GameState, from_who: &RelativePlayer) -> u32;
-    fn select_cards(&self, game: &GameState, from_who: &RelativePlayer) -> HashSet<u32>;
+
+    /// return 0 to attempt to buy an explorer
+    fn select_trade_row_card(&self, game: &GameState) -> UserActionIntent<u32>;
+
     fn on_feedback(&self, feedback: Feedback);
 }
 
@@ -101,9 +129,10 @@ impl PlayerArea {
             hand_id: HashMap::new(),
             goods: Goods {
                 combat: 0,
-                authority: 0,
+                authority: 50,
                 trade: 0
-            }
+            },
+            turn_data: TurnData::new()
         };
         for _ in 0..8 {
             pa.deck.add(scout.clone());
@@ -138,13 +167,23 @@ impl PlayerArea {
         let mut id_index = 0;
         for _ in 0..num_cards {
             let card = self.draw();
+            if let None = card {
+                break;
+            }
+            let card = card.unwrap();
             while self.hand_id.contains_key(&id_index) {
                 id_index += 1;
+            }
+            if card.base.is_some() {
+                self.turn_data.to_be_discarded.insert(id_index);
             }
             self.hand_id.insert(id_index, (card, CardStatus::new()));
         }
     }
-    pub fn discard_hand(&mut self) {
+
+    /// Note: this may not ever be used because each card is handled differently
+    /// at the end of a turn. It might be scrapped, discarded, or kept (bases)
+    fn discard_hand(&mut self) {
         let keys_vec = {
             let mut tmp = vec![];
             let keys = self.hand_id.keys();
@@ -154,10 +193,25 @@ impl PlayerArea {
             tmp
         };
         for id in keys_vec {
-            if let Failure::Fail(_) = self.discard_by_id(&id) {
-                panic!("PlayerArea::discard_hand: id {} is not in hand_id somehow", id);
+            if let Failure::Fail(err) = self.discard_by_id(&id) {
+                panic!("PlayerArea::discard_hand: {}", err);
             }
         }
+    }
+    pub fn end_turn(&mut self) {
+        let to_be_scrapped = self.turn_data.to_be_scrapped.clone();
+        for id in to_be_scrapped {
+            if let Failure::Fail(err) = self.scrap_by_id(&id) {
+                panic!("PlayerArea::end_turn: {}", err);
+            }
+        }
+        let to_be_discarded = self.turn_data.to_be_discarded.clone();
+        for id in to_be_discarded {
+            if let Failure::Fail(err) = self.discard_by_id(&id) {
+                panic!("PlayerArea::end_turn: {}", err);
+            }
+        }
+        self.turn_data.reset();
     }
     pub fn discard_by_id(&mut self, id: &u32) -> Failure<String> {
         match self.hand_id.remove(id) {
@@ -168,15 +222,29 @@ impl PlayerArea {
             None => Failure::Fail(format!("cannot discard card by id {}!", id))
         }
     }
-    fn draw(&mut self) -> Card {
+    pub fn scrap_by_id(&mut self, id: &u32) -> Failure<String> {
+        match self.hand_id.remove(id) {
+            Some((card, _)) => {
+                self.scrapped.add(card);
+                Failure::Succeed
+            },
+            None => Failure::Fail(format!("cannot scrap card by id {}!", id))
+        }
+    }
+    fn draw(&mut self) -> Option<Card> {
         if let Some(c) = self.deck.draw() {
-            c
+            Some(c)
         } else {
             self.discard.shuffle();
             while let Some(c) = self.discard.draw() {
                 self.deck.add(c);
             }
-            self.draw() // this *should* never recurse infinitely because you start with 10 cards lol
+            if self.deck.len() > 0 {
+                // this *should* never recurse infinitely
+                self.draw()
+            } else {
+                None
+            }
         }
     }
 }
@@ -191,15 +259,15 @@ impl GameState {
             player1: PlayerArea::new((*scout).clone(), (*viper).clone(), true),
             player2: PlayerArea::new((*scout).clone(), (*viper).clone(), false),
             current_player: Player::Player1,
-            trade_row: CardStack::empty(),
+            trade_row: Stack::empty(),
             explorers: 10,
             scrapped: CardStack::empty(),
             trade_row_stack: {
-                let mut stack = CardStack::new(card_library.get_new_trade_stack());
+                let mut stack = Stack::new(card_library.get_new_trade_stack());
                 stack.shuffle();
                 stack
             },
-            card_library: card_library.clone(),
+            card_library: Rc::clone(&card_library),
         };
         // todo: number of cards in trade row hard-coded
         gs.fill_trade_row(5);
@@ -216,7 +284,7 @@ impl GameState {
         for _ in 0..left {
             match self.trade_row_stack.draw() {
                 None => break,
-                Some(card) => self.trade_row.add(card)
+                Some(id) => self.trade_row.add(id)
             }
         }
     }
@@ -280,15 +348,14 @@ impl GameState {
     }
 
 
-    /// A Result::Err(Feedback::Invalid) represents an *internal failure* that should be
-    ///     reported to the client, such as a bad config
-    /// A Result::Err(Feedback::Info) represents an incomplete process that should be
-    ///     reported to the client and the user.
-    /// A Result::Ok(Option::Some) represents a successful operation that should be reported
-    ///     to the user.
-    /// A Result::Ok(Option::None) represents a successful operation that does not require comment.
-    pub fn advance<T>(&mut self, client: &T) -> Result<Option<String>, Feedback>
+    /// A Result::Err(s) indicates an internal error: STRICTLY UNRECOVERABLE
+    /// A Result::Ok(s) indicates a message that should be logged, but not shown to the user
+    ///     this case is RECOVERABLE (the function can be run again)
+    pub fn advance<T>(&mut self, client: &T) -> Result<String, String>
         where T: ConfigSupplier + UserActionSupplier {
+        println!("current player: {:?}", self.current_player);
+        println!("{:?}", self.get_current_player().goods);
+        // println!("info:\n{:#?}", self.get_current_player());
         if let UserActionIntent::Continue((card_id, (cond_s, act_s)))
                 // select to either exit, or continue with an effect
             = client.select_effect(self) {
@@ -303,47 +370,95 @@ impl GameState {
                     format!("GameState.advance(): bad selection action {}", &act_s)
                         .as_str());
             // evaluate the condition
-            if cond(self, card_id) {
+            if cond(self, &card_id) {
                 // if true, run the action
+                // println!("cond succeeded! running action...");
                 match action_func(self,
-                               match action_meta.config {
-                                   Some(config) => client.get_config(self, &config),
-                                   _ => 0,
-                               }) {
+                                  match action_meta.config {
+                                      Some(config) => client.get_config(self, &config),
+                                      _ => 0,
+                                  }) {
                     // if the action fails, then a bad config was passed in.
                     // perhaps we can report these better
-                    Fail(msg) => Err(Feedback::Invalid(
+                    Fail(msg) => Err(
                         format!(
                             "Unable to complete action to {}. {}",
                             action_meta.description.clone(),
                             msg)
-                    )),
+                    ),
                     // if it succeeds, make sure to consume the effect
                     Succeed => {
                         match self.get_current_player_mut().get_card_in_hand_mut(&card_id) {
                             Some((_, card_status)) => {
                                 card_status.use_effect(&(cond_s, act_s));
-                                Ok(None)
+                                Ok("Effect was used and consumed".to_string())
                             }
                             None => Err(
-                                Feedback::Invalid(
                                     format!(
                                         "Card id {} is not one of {:?}",
                                         card_id,
-                                        self.get_current_player().hand_id.keys())))
+                                        self.get_current_player().hand_id.keys()))
                         }
                     }
                 }
             } else {
                 // if the condition is not true, report the mistake to the client, or user?
-                Err(Feedback::Info("This effect is not possible at the moment.".to_string()))
+                let s = "This effect is not possible at the moment.".to_string();
+                client.on_feedback(Feedback::Invalid(s.clone()));
+                Ok(s)
+            }
+        } else if let UserActionIntent::Continue(index) = client.select_trade_row_card(self) {
+            if index == 0 {
+                return if self.explorers == 0 {
+                    let s = "There are no explorers left".to_string();
+                    client.on_feedback(Feedback::Invalid(s.clone()));
+                    Ok(s)
+                } else {
+                    let explorer = (*self.card_library.get_explorer().unwrap()).clone();
+                    if explorer.cost > self.get_current_player().goods.trade {
+                        client.on_feedback(
+                            Feedback::Invalid(
+                                "Not enough trade to buy an explorer".to_string()));
+                        Ok("Cannot buy explorer".to_string())
+                    } else {
+                        self.explorers -= 1;
+                        self.get_current_player_mut().goods.trade -= explorer.cost;
+                        self.get_current_player_mut().discard.add(explorer);
+                        Ok("Bought an explorer".to_string())
+                    }
+                }
+            }
+            let index = index - 1; // the 0th place was just for explorers, a special case
+            let card_id = self.trade_row.peek(index as usize);
+            if let Some(card_id) = card_id {
+                let card = self.card_library.as_card(card_id);
+                if card.cost <= self.get_current_player().goods.trade {
+                    self.trade_row.remove(index as usize).unwrap();
+                    let success_message = format!("{:?} acquired {}", self.current_player, &card.name);
+                    let player = self.get_current_player_mut();
+                    player.goods.trade -= card.cost;
+                    player.discard.add((*card).clone());
+                    Ok(success_message)
+                } else {
+                    let s = format!("Cannot purchase card {} since the cost is more \
+                        trade than the current player owns. {} > {}", card.name, card.cost,
+                                    self.get_current_player().goods.trade);
+                    client.on_feedback(Feedback::Invalid(s.clone()));
+                    Ok(s)
+                }
+            } else {
+                Err(format!("Client error: index was out of bounds. Cannot peek card \
+                    at {} in a trade row of length {}", index, self.trade_row.len()))
             }
         } else {
             // the client chooses to exit, and hand over the turn.
-            // todo: warn them if they haven't completed all their effects
+            // todo: warn them if they haven't completed all their effects with Feedback::Info
+            //     and client.on_feedback()
             // todo: automatically exit turn if all effects have been completed
+            self.get_current_player_mut().end_turn();
+            self.get_current_player_mut().draw_hand(5);
             self.flip_turn();
-            Ok(None)
+            Ok("Turn was ended".to_string())
         }
     }
 }

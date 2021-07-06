@@ -14,8 +14,10 @@ mod tests {
     use crate::game::components::faction::Faction;
     use crate::game::components::stack::Stack;
     use crate::game::effects::assert_validate_card_effects;
-    use crate::game::Goods;
+    use crate::game::{Goods, GameState, PlayerArea};
     use crate::parse::{parse_card, parse_file, parse_goods};
+    use crate::game::card_library::CardLibrary;
+    use std::mem;
 
     #[test]
     fn test_shuffle() {
@@ -186,6 +188,18 @@ card2:
             authority: 225,
             trade: 124
         });
+    }
+
+    /// from this test passing I conclude that the memory problem is not the card library
+    #[test]
+    fn test_sizes () {
+        println!("Size of String: {}", mem::size_of::<String>());
+        println!("Size of CardLibrary: {}", mem::size_of::<CardLibrary>());
+        println!("Size of GameState: {}", mem::size_of::<GameState>());
+        println!("Size of Card: {}", mem::size_of::<Card>());
+        println!("Size of &Card: {}", mem::size_of::<&Card>());
+        println!("Size of PlayerArea: {}", mem::size_of::<PlayerArea>());
+        println!("Size of HashSet<(String, String)>: {}", mem::size_of::<HashSet<(String, String)>>());
     }
 
     fn print_long_message(msg: &str) {
