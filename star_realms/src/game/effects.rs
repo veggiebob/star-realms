@@ -22,12 +22,13 @@ pub struct ActionMeta {
 
 pub struct Config {
     /// dev-friendly description for each of the config values
-    pub description: Box<dyn Fn(u32) -> String>,
+    pub describe: Box<dyn Fn(u32) -> String>,
     /// enum that shows how to get the config value (u32)
     pub config_method: ActionConfigMethod
 }
 
 pub trait ConfigSupplier {
+    /// get a config value (u32) for an action based on this Config object
     fn get_config(&self, game: &GameState, config: &Config) -> u32;
 }
 
@@ -115,7 +116,7 @@ pub fn get_condition(name: String) -> Option<ConditionFunc> {
                         .get_card_in_hand(id)
                         .expect("synergy condition: bad id supplied")
                         .0.synergizes_with.contains(p),
-                    Err(e) => panic!(format!("'{}' is not a valid condition! {}", &n, e))
+                    Err(e) => panic!("'{}' is not a valid condition! {}", &n, e)
                 }
             })
         ),
@@ -165,7 +166,7 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                 ActionMeta {
                     description: "opponent discards a card".to_string(),
                     config: Some(Config {
-                        description: Box::new(|_| "hand id of card to be discarded".to_string()),
+                        describe: Box::new(|_| "hand id of card to be discarded".to_string()),
                         config_method: ActionConfigMethod::PickHandCard(Opponent, Opponent)
                     })
                 },
@@ -191,7 +192,7 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                 ActionMeta {
                     description: "destroy any of the opponents bases".to_string(),
                     config: Some(Config {
-                        description: Box::new(|_| "hand id of the base to be destroyed".to_string()),
+                        describe: Box::new(|_| "hand id of the base to be destroyed".to_string()),
                         config_method: ActionConfigMethod::PickHandCard(RelativePlayer::Current, RelativePlayer::Opponent)
                     }),
                 },

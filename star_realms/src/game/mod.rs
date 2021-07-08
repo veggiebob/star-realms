@@ -108,9 +108,19 @@ pub enum Feedback {
 
 pub enum UserActionIntent<T> {
     Continue(T),
-    Finish
+    Cancel
 }
+
+pub enum AbstractPlayerAction {
+    CardEffects,
+    TradeRow,
+    TrashCard,
+    EndTurn,
+}
+
 pub trait UserActionSupplier {
+
+    fn choose_abstract_action(&self, game: &GameState) -> AbstractPlayerAction;
 
     fn select_effect(&self, game: &GameState) -> UserActionIntent<(u32, (String, String))>;
 
@@ -211,6 +221,8 @@ impl PlayerArea {
                 panic!("PlayerArea::end_turn: {}", err);
             }
         }
+        self.goods.trade = 0;
+        self.goods.combat = 0; // todo: aggregate combat then deal it at the end of the turn
         self.turn_data.reset();
     }
     pub fn discard_by_id(&mut self, id: &u32) -> Failure<String> {
@@ -355,110 +367,124 @@ impl GameState {
         where T: ConfigSupplier + UserActionSupplier {
         println!("current player: {:?}", self.current_player);
         println!("{:?}", self.get_current_player().goods);
-        // println!("info:\n{:#?}", self.get_current_player());
-        if let UserActionIntent::Continue((card_id, (cond_s, act_s)))
-                // select to either exit, or continue with an effect
-            = client.select_effect(self) {
-            // then parse the condition and action of this effect
-            let mut cond = get_condition(cond_s.clone())
-                .expect(
-                    format!(
-                        "GameState.advance(): bad selection condition {}", &cond_s)
-                        .as_str());
-            let (action_meta, mut action_func) = get_action(&act_s)
-                .expect(
-                    format!("GameState.advance(): bad selection action {}", &act_s)
-                        .as_str());
-            // evaluate the condition
-            if cond(self, &card_id) {
-                // if true, run the action
-                // println!("cond succeeded! running action...");
-                match action_func(self,
-                                  match action_meta.config {
-                                      Some(config) => client.get_config(self, &config),
-                                      _ => 0,
-                                  }) {
-                    // if the action fails, then a bad config was passed in.
-                    // perhaps we can report these better
-                    Fail(msg) => Err(
+
+        let next = client.choose_abstract_action(self);
+        match next {
+            AbstractPlayerAction::CardEffects =>
+                if let UserActionIntent::Continue((card_id, (cond_s, act_s)))
+            // select to either exit, or continue with an effect
+                = client.select_effect(self) {
+                // then parse the condition and action of this effect
+                let mut cond = get_condition(cond_s.clone())
+                    .expect(
                         format!(
-                            "Unable to complete action to {}. {}",
-                            action_meta.description.clone(),
-                            msg)
-                    ),
-                    // if it succeeds, make sure to consume the effect
-                    Succeed => {
-                        match self.get_current_player_mut().get_card_in_hand_mut(&card_id) {
-                            Some((_, card_status)) => {
-                                card_status.use_effect(&(cond_s, act_s));
-                                Ok("Effect was used and consumed".to_string())
-                            }
-                            None => Err(
+                            "GameState.advance(): bad selection condition {}", &cond_s)
+                            .as_str());
+                let (action_meta, mut action_func) = get_action(&act_s)
+                    .expect(
+                        format!("GameState.advance(): bad selection action {}", &act_s)
+                            .as_str());
+                // evaluate the condition
+                if cond(self, &card_id) {
+                    // if true, run the action
+                    // println!("cond succeeded! running action...");
+                    match action_func(self,
+                                      match action_meta.config {
+                                          Some(config) => client.get_config(self, &config),
+                                          _ => 0,
+                                      }) {
+                        // if the action fails, then a bad config was passed in.
+                        // perhaps we can report these better
+                        Fail(msg) => Err(
+                            format!(
+                                "Unable to complete action to {}. {}",
+                                action_meta.description.clone(),
+                                msg)
+                        ),
+                        // if it succeeds, make sure to consume the effect
+                        Succeed => {
+                            match self.get_current_player_mut().get_card_in_hand_mut(&card_id) {
+                                Some((_, card_status)) => {
+                                    card_status.use_effect(&(cond_s, act_s));
+                                    Ok("Effect was used and consumed".to_string())
+                                }
+                                None => Err(
                                     format!(
                                         "Card id {} is not one of {:?}",
                                         card_id,
                                         self.get_current_player().hand_id.keys()))
+                            }
                         }
                     }
-                }
-            } else {
-                // if the condition is not true, report the mistake to the client, or user?
-                let s = "This effect is not possible at the moment.".to_string();
-                client.on_feedback(Feedback::Invalid(s.clone()));
-                Ok(s)
-            }
-        } else if let UserActionIntent::Continue(index) = client.select_trade_row_card(self) {
-            if index == 0 {
-                return if self.explorers == 0 {
-                    let s = "There are no explorers left".to_string();
+                } else {
+                    // if the condition is not true, report the mistake to the client, or user?
+                    let s = "This effect is not possible at the moment.".to_string();
                     client.on_feedback(Feedback::Invalid(s.clone()));
                     Ok(s)
-                } else {
-                    let explorer = (*self.card_library.get_explorer().unwrap()).clone();
-                    if explorer.cost > self.get_current_player().goods.trade {
-                        client.on_feedback(
-                            Feedback::Invalid(
-                                "Not enough trade to buy an explorer".to_string()));
-                        Ok("Cannot buy explorer".to_string())
-                    } else {
-                        self.explorers -= 1;
-                        self.get_current_player_mut().goods.trade -= explorer.cost;
-                        self.get_current_player_mut().discard.add(explorer);
-                        Ok("Bought an explorer".to_string())
+                }
+            } else {
+                Ok("Canceled card effect selection".to_string())
+            }
+            AbstractPlayerAction::TradeRow =>
+                if let UserActionIntent::Continue(index) = client.select_trade_row_card(self) {
+                    if index == 0 {
+                        return if self.explorers == 0 {
+                            let s = "There are no explorers left".to_string();
+                            client.on_feedback(Feedback::Invalid(s.clone()));
+                            Ok(s)
+                        } else {
+                            let explorer = (*self.card_library.get_explorer().unwrap()).clone();
+                            if explorer.cost > self.get_current_player().goods.trade {
+                                client.on_feedback(
+                                    Feedback::Invalid(
+                                        "Not enough trade to buy an explorer".to_string()));
+                                Ok("Cannot buy explorer".to_string())
+                            } else {
+                                self.explorers -= 1;
+                                self.get_current_player_mut().goods.trade -= explorer.cost;
+                                self.get_current_player_mut().discard.add(explorer);
+                                Ok("Bought an explorer".to_string())
+                            }
+                        }
                     }
-                }
-            }
-            let index = index - 1; // the 0th place was just for explorers, a special case
-            let card_id = self.trade_row.peek(index as usize);
-            if let Some(card_id) = card_id {
-                let card = self.card_library.as_card(card_id);
-                if card.cost <= self.get_current_player().goods.trade {
-                    self.trade_row.remove(index as usize).unwrap();
-                    let success_message = format!("{:?} acquired {}", self.current_player, &card.name);
-                    let player = self.get_current_player_mut();
-                    player.goods.trade -= card.cost;
-                    player.discard.add((*card).clone());
-                    Ok(success_message)
+                    let index = index - 1; // the 0th place was just for explorers, a special case
+                    let card_id = self.trade_row.peek(index as usize);
+                    if let Some(card_id) = card_id {
+                        let card = self.card_library.as_card(card_id);
+                        if card.cost <= self.get_current_player().goods.trade {
+                            self.trade_row.remove(index as usize).unwrap();
+                            let success_message = format!("{:?} acquired {}", self.current_player, &card.name);
+                            let player = self.get_current_player_mut();
+                            player.goods.trade -= card.cost;
+                            player.discard.add((*card).clone());
+                            Ok(success_message)
+                        } else {
+                            let s = format!("Cannot purchase card {} since the cost is more \
+                                trade than the current player owns. {} > {}", card.name, card.cost,
+                                            self.get_current_player().goods.trade);
+                            client.on_feedback(Feedback::Invalid(s.clone()));
+                            Ok(s)
+                        }
+                    } else {
+                        Err(format!("Client error: index was out of bounds. Cannot peek card \
+                            at {} in a trade row of length {}", index, self.trade_row.len()))
+                    }
                 } else {
-                    let s = format!("Cannot purchase card {} since the cost is more \
-                        trade than the current player owns. {} > {}", card.name, card.cost,
-                                    self.get_current_player().goods.trade);
-                    client.on_feedback(Feedback::Invalid(s.clone()));
-                    Ok(s)
+                    Ok("Canceled trade row purchase".to_string())
                 }
-            } else {
-                Err(format!("Client error: index was out of bounds. Cannot peek card \
-                    at {} in a trade row of length {}", index, self.trade_row.len()))
+            AbstractPlayerAction::EndTurn => {
+                // the client chooses to exit, and hand over the turn.
+                // todo: warn them if they haven't completed all their effects with Feedback::Info
+                //     and client.on_feedback()
+                // todo: automatically exit turn if all effects have been completed
+                self.get_current_player_mut().end_turn();
+                self.get_current_player_mut().draw_hand(5);
+                self.flip_turn();
+                Ok("Turn was ended".to_string())
             }
-        } else {
-            // the client chooses to exit, and hand over the turn.
-            // todo: warn them if they haven't completed all their effects with Feedback::Info
-            //     and client.on_feedback()
-            // todo: automatically exit turn if all effects have been completed
-            self.get_current_player_mut().end_turn();
-            self.get_current_player_mut().draw_hand(5);
-            self.flip_turn();
-            Ok("Turn was ended".to_string())
+            AbstractPlayerAction::TrashCard => {
+                todo!("trash card abstract action")
+            }
         }
     }
 }

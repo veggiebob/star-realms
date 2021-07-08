@@ -35,8 +35,17 @@ impl CardStatus {
     pub fn reveal(&mut self) {
         self.in_play = true;
     }
-    pub fn all_effects_used(&self) -> bool {
-        todo!("CardStatus::all_effects_used")
+    pub fn all_effects_used(&self, card: &Card) -> bool {
+        self.unused_effects(card).is_empty()
+    }
+    pub fn unused_effects(&self, card: &Card) -> HashSet<(String, String)> {
+        let mut eff = HashSet::new();
+        for e in card.effects.iter() {
+            if !self.effects_used.contains(e) {
+                eff.insert(e.clone());
+            }
+        }
+        eff
     }
     pub fn use_effect(&mut self, effect: &(String, String)) {
         self.effects_used.insert(effect.clone());

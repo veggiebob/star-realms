@@ -79,3 +79,9 @@ impl<T> Stack<T> {
         self.elements.iter()
     }
 }
+
+impl<T: Clone> Clone for Stack<T> {
+    fn clone(&self) -> Self {
+        Stack::new(self.elements.clone())
+    }
+}
