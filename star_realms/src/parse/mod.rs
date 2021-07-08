@@ -29,7 +29,8 @@ pub fn parse_file (filepath: String) -> Result<Vec<Card>, String> {
                                     Some(key) => {
                                         match parse_card(key, v.clone()) {
                                             Ok(nice) => cards.push(nice),
-                                            Err(e) => return Err(format!("error on card '{}': {}", key, e))
+                                            Err(e) => return Err(
+                                                format!("error on card '{}': {}", key, e))
                                         }
                                     }
                                 }

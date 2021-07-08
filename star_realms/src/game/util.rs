@@ -8,7 +8,7 @@ pub enum Failure<T> {
 impl<T: Display> Failure<T> {
     pub fn check(&self) {
         if let Failure::Fail(message) = self {
-            panic!(format!("Failure was unwrapped! {}", message));
+            panic!("Failure was unwrapped! {}", message);
         }
     }
 }

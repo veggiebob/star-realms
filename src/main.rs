@@ -1,3 +1,4 @@
+pub mod cl_client;
 fn main() {
-    println!("Hello, world!");
+    cl_client::main::main();
 }

@@ -3,7 +3,7 @@ use std::slice::Iter;
 
 #[derive(Debug)]
 pub struct Stack<T> {
-    elements: Vec<T>,
+    pub elements: Vec<T>,
 }
 
 impl<T> Stack<T> {
@@ -17,6 +17,10 @@ impl<T> Stack<T> {
         Stack {
             elements: vec![]
         }
+    }
+
+    pub fn peek(&self, index: usize) -> Option<&T> {
+        self.elements.get(index)
     }
 
     pub fn len(&self) -> usize {
@@ -73,5 +77,11 @@ impl<T> Stack<T> {
 
     pub fn iter(&self) -> Iter<'_, T> {
         self.elements.iter()
+    }
+}
+
+impl<T: Clone> Clone for Stack<T> {
+    fn clone(&self) -> Self {
+        Stack::new(self.elements.clone())
     }
 }

@@ -2,22 +2,35 @@ use crate::game::components::card::Card;
 use std::collections::HashMap;
 use crate::game::components::stack::Stack;
 use std::rc::Rc;
+use crate::parse::parse_file;
 
 pub struct CardLibrary {
     all_cards: Vec<Rc<Card>>,
-    card_map: HashMap<String, Rc<Card>>,
-    trade_stack: Stack<Rc<Card>>
+    id_map: HashMap<u32, Rc<Card>>,
+    id_lookup: HashMap<String, u32>,
+    trade_stack: Stack<u32>
 }
 
 impl CardLibrary {
+    pub fn from_config(config_folder: &str) -> Result<CardLibrary, String> {
+        let trade_cards = parse_file(
+            format!("{}/trade_cards.yaml", config_folder)
+        )?;
+        let misc_cards = parse_file(
+            format!("{}/misc_cards.yaml", config_folder)
+        )?;
+        CardLibrary::new(trade_cards, misc_cards)
+    }
+
     pub fn new(trade_stack: Vec<Card>, misc_cards: Vec<Card>) -> Result<CardLibrary, String> {
-        let misc_cards: Vec<Rc<Card>> = {
+        let misc_cards = {
             let mut tmp = vec![];
             for card in misc_cards {
                 tmp.push(Rc::new(card));
             }
             tmp
         };
+
         let trade_stack: Vec<Rc<Card>> = {
             let mut tmp = vec![];
             for card in trade_stack {
@@ -26,29 +39,38 @@ impl CardLibrary {
             tmp
         };
 
-        let mut map: HashMap<String, Rc<Card>> = HashMap::new();
-        for card in misc_cards.iter() {
-            map.insert(card.name.clone(), Rc::clone(card));
-        }
-        for card in trade_stack.iter() {
-            map.insert(card.name.clone(), Rc::clone(card));
-        }
+        let all_cards: Vec<Rc<Card>> = {
+            let mut ac = vec![];
+            for card in trade_stack.iter() {
+                ac.push(Rc::clone(card));
+            }
+            for card in misc_cards.iter() {
+                ac.push(Rc::clone(card));
+            }
+            ac
+        };
 
-        let mut ts: Stack<Rc<Card>> = Stack::empty();
-        for card in trade_stack.iter() {
-            ts.add(Rc::clone(card));
-        }
+        let (id_map, id_lookup) = {
+            let mut id_map = HashMap::new();
+            let mut id_lookup = HashMap::new();
+            for (i, card) in all_cards.iter().enumerate() {
+                id_map.insert(i as u32, Rc::clone(card));
+                id_lookup.insert(card.name.clone(), i as u32);
+            }
+            (id_map, id_lookup)
+        };
 
-        let mut all_cards: Vec<Rc<Card>> = vec![];
-        for card in trade_stack {
-            all_cards.push(card);
-        }
-        for card in misc_cards {
-            all_cards.push(card);
-        }
+        let ts: Stack<u32> = {
+            let mut tmp = Stack::empty();
+            for card in trade_stack.iter() {
+                tmp.add(id_lookup.get(&card.name).unwrap().clone());
+            }
+            tmp
+        };
 
         let cl = CardLibrary {
-            card_map: map,
+            id_map,
+            id_lookup,
             trade_stack: ts,
             all_cards
         };
@@ -64,27 +86,57 @@ impl CardLibrary {
         }
     }
 
-    pub fn get_new_trade_stack(&self) -> Vec<Card> {
+    pub fn get_new_trade_stack(&self) -> Vec<u32> {
         let mut vec = vec![];
-        for card in self.trade_stack.iter() {
-            vec.push((**card).clone());
+        for id in self.trade_stack.iter() {
+            vec.push(id.clone());
         }
         vec
     }
 
     pub fn get_card_by_name(&self, name: &str) -> Option<Rc<Card>> {
-        match self.card_map.get(name) {
-            Some(card) => Some(Rc::clone(card)),
+        match self.id_lookup.get(name) {
+            Some(id) => Some(self.get_card_by_id(id).unwrap()), // guarantee it, or else!
             None => None
         }
+    }
+
+    pub fn as_new_card(&self, id: &u32) -> Card {
+        (*self.as_card(id)).clone()
+    }
+
+    /// force-get a card
+    pub fn as_card(&self, id: &u32) -> Rc<Card> {
+        self.get_card_by_id(id).unwrap()
+    }
+
+    /// request a card politely
+    pub fn get_card_by_id(&self, id: &u32) -> Option<Rc<Card>> {
+        match self.id_map.get(id) {
+            Some(c) => Some(Rc::clone(c)),
+            None => None
+        }
+    }
+
+    pub fn get_new_card_by_id(&self, id: &u32) -> Option<Card> {
+        match self.get_card_by_id(id) {
+            Some(c) => Some((*c).clone()),
+            None => None
+        }
+    }
+
+    pub fn get_card_id(&self, name: &String) -> Option<&u32> {
+        self.id_lookup.get(name)
     }
 
     pub fn get_scout(&self) -> Option<Rc<Card>> {
         self.get_card_by_name("scout")
     }
+
     pub fn get_viper(&self) -> Option<Rc<Card>> {
         self.get_card_by_name("viper")
     }
+
     pub fn get_explorer(&self) -> Option<Rc<Card>> {
         self.get_card_by_name("explorer")
     }
