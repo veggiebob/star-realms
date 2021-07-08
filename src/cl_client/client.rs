@@ -53,7 +53,7 @@ impl Client {
         let choices = choices.0;
         let mut n = 0;
         for &c in choices.iter() {
-            n |= u32::pow(2, c);
+            n |= 1<<c;
         }
         println!("DEBUG Client::pick_hand_cards: cards: {:?} converted to {}", choices, n);
         n

@@ -167,6 +167,30 @@ impl PlayerArea {
         }
         set
     }
+
+    /// panic if there are more bits than cards in `hand_ids`
+    pub fn unpack_multi_card_id(&self, bit_flagged: u32) -> HashSet<u32> {
+        let mut ids = HashSet::new();
+        let num_cards = f32::log2(bit_flagged as f32).ceil() as u32;
+        // println!("unpacking: {}", bit_flagged);
+        // println!("there are {} cards", num_cards);
+        let hand_ids = self.get_all_hand_card_ids();
+        let sorted_ids = {
+            let mut tmp: Vec<_> = hand_ids.iter().collect();
+            tmp.sort();
+            tmp
+        };
+        if num_cards as usize > sorted_ids.len() {
+            panic!("Bit flag contained more bits than there are cards in the hand!");
+        }
+        for i in 0..num_cards {
+            if ((1<<i) & bit_flagged) > 0 {
+                ids.insert(*sorted_ids[i as usize]);
+            }
+        }
+        ids
+    }
+
     pub fn get_card_in_hand(&self, id: &u32) -> Option<&(Card, CardStatus)> {
         self.hand_id.get(id)
     }
