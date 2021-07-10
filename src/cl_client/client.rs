@@ -4,6 +4,9 @@ use star_realms::game::effects::{ConfigSupplier, Config, ActionConfigMethod, get
 use std::io;
 use std::io::Error;
 use std::str::FromStr;
+use ansi_term::Color;
+use std::fmt::Display;
+use star_realms::game::components::card::CardStatus;
 
 pub struct Client {
     pub name: String
@@ -62,10 +65,13 @@ impl Client {
 impl UserActionSupplier for Client {
     fn choose_abstract_action(&self, game: &GameState) -> AbstractPlayerAction {
         println!("Select an action:");
-        println!(" 0 - Use effects on cards");
-        println!(" 1 - View trade row");
-        println!(" 2 - Trash a card");
-        println!(" 3 - End Turn");
+        let options = vec![
+            "Use effects on cards",
+            "View trade row",
+            "Trash a card",
+            "End Turn"
+            ];
+        print_options(&options);
         match get_value_input(|&i: &u8| i < 4) {
             0 => AbstractPlayerAction::CardEffects,
             1 => AbstractPlayerAction::TradeRow,
@@ -81,14 +87,36 @@ impl UserActionSupplier for Client {
         let mut enumerated = HashMap::new();
         let mut card_index_map = HashMap::new();
 
-        println!(" 0: Skip effects");
+        println!(" {}: Skip effects", Color::Blue.paint("0"));
         for (id, (card, card_status)) in ids.iter().map(|id| (id, cp.get_card_in_hand(id).unwrap())) {
             let unused_effects = card_status.unused_effects(card);
             if !unused_effects.is_empty() {
                 println!("{}:", &card.name);
                 // println!("All effects: {:?}", card.effects);
                 for effect in unused_effects {
-                    println!(" {} - {:?}", index, effect);
+                    if CardStatus::is_free(&effect.1) {
+                        match card_status.get_good(&effect.1) {
+                            Some(g) => println!(
+                                " {} - {}",
+                                Color::Blue.paint(index.to_string()),
+                                g
+                            ),
+                            None => println!(
+                                " {} - {}",
+                                Color::Blue.paint(index.to_string()),
+                                &effect.1
+                            )
+                        }
+                    } else {
+                        match card_status.get_good(&effect.1) {
+                            Some(g) => println!(" {} - {} => {}", Color::Blue.paint(index.to_string()),
+                                                effect.0, g
+                            ),
+                            None => println!(" {} - {} => {}", Color::Blue.paint(index.to_string()),
+                                             effect.0, effect.1
+                            )
+                        }
+                    }
                     enumerated.insert(index, effect.clone());
                     card_index_map.insert(index, id);
                     index += 1;
@@ -115,12 +143,12 @@ impl UserActionSupplier for Client {
     fn select_trade_row_card(&self, game: &GameState) -> UserActionIntent<u32> {
         println!("Select a card by number, less than {}", game.trade_row.len());
         if game.explorers > 0 {
-            println!(" 0 - explorer ({} left)", game.explorers);
+            println!(" {} - explorer ({} left)", Color::Blue.paint("0"), game.explorers);
         }
         let index = 1;
         for id in game.trade_row.elements.iter() {
             let card = game.card_library.as_card(id);
-            println!(" {} - {} ({})", index, card.name, card.cost);
+            println!(" {} - {} ({})", Color::Blue.paint(index.to_string()), card.name, Color::Yellow.paint(card.cost.to_string()));
         }
         UserActionIntent::Continue(get_value_input(|&i| {
             i <= game.trade_row.len() as u32 && (i > 0 || game.explorers > 0)
@@ -128,10 +156,10 @@ impl UserActionSupplier for Client {
     }
     fn on_feedback(&self, feedback: Feedback) {
         match feedback {
-            Feedback::Invalid(msg) => println!("Invalid action! {}", msg),
+            Feedback::Invalid(msg) => println!("{} {}", Color::Red.paint("Invalid action!"), Color::Red.paint(msg)),
             Feedback::Info(msg) => {
-                println!("Just letting you know...");
-                println!("{}", msg);
+                println!("{}", Color::Yellow.paint("Just letting you know..."));
+                println!("{}", Color::Yellow.paint(msg));
             }
         }
     }
@@ -143,6 +171,12 @@ fn summarize_hand(player: &PlayerArea) -> String {
         str += format!(" {} - {}\n", id, player.get_card_in_hand(id).unwrap().0.name.clone()).as_str();
     }
     str
+}
+
+fn print_options<T: ToString>(options: &Vec<T>) {
+    for (index, element) in options.iter().enumerate() {
+        println!(" {} - {}", Color::Blue.paint(index.to_string()), element.to_string());
+    }
 }
 
 fn input() -> String {

@@ -6,6 +6,8 @@ use crate::game::RelativePlayer::Opponent;
 use crate::game::components::card::{Base, Card};
 use std::collections::HashSet;
 use crate::parse::parse_goods;
+use std::fmt::{Display, Formatter};
+use ansi_term::Color;
 
 /// Effects!
 
@@ -252,5 +254,14 @@ impl AddAssign for Goods {
         self.trade += rhs.trade;
         self.authority += rhs.authority;
         self.combat += rhs.combat;
+    }
+}
+
+impl Display for Goods {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<{}> <{}> <{}>",
+            Color::Yellow.paint(self.trade.to_string()),
+            Color::Blue.paint(self.authority.to_string()),
+            Color::Red.paint(self.combat.to_string()))
     }
 }
