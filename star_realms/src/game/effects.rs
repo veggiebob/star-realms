@@ -159,6 +159,42 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
             None
         }
     }
+    let pattern = regex::Regex::new(r"draw(\s\d)?").unwrap();
+    if pattern.is_match(name.as_str()) {
+        if let Some(captures) = pattern.captures(name) {
+            if let Some(n) = captures.get(1) {
+                if let Ok(n) = n.as_str().parse::<u32>() {
+                    return Some(
+                        (
+                            ActionMeta {
+                                description: format!("Draw {} cards from your deck", &n),
+                                config: None
+                            },
+                            Box::new(move |game, _| {
+                                for i in 0..n {
+                                    game.get_current_player_mut().draw_into_hand();
+                                }
+                                Succeed
+                            })
+                        )
+                    )
+                }
+            } else {
+                return Some(
+                    (
+                        ActionMeta {
+                            description: "Draw a card from your deck".to_string(),
+                            config: None
+                        },
+                        Box::new(|game, _| {
+                            game.get_current_player_mut().draw_into_hand();
+                            Succeed
+                        })
+                    )
+                )
+            }
+        }
+    }
     match name.as_str() {
         "test" => Some(
             (
@@ -225,7 +261,8 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                             } else {
                                 match opponent.discard_by_id(&cfg) {
                                     Succeed => Succeed,
-                                    Failure::Fail(msg) => Failure::Fail(format!("Unable to discard this card because: {}", msg))
+                                    Failure::Fail(msg) => Failure::Fail(
+                                        format!("Unable to discard this card because: {}", msg))
                                 }
                             }
                         }

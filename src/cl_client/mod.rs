@@ -32,13 +32,14 @@ pub mod main {
         println!("cl_client::main::main: Game has ended!");
     }
     pub fn debug () {
+        println!("{}", Color::Red.paint("***** ***** RUNNING IN DEBUG MODE ***** *****"));
         let mut game = match GameState::from_config("star_realms/config") {
             Ok(g) => g,
             Err(e) => panic!("Could not create game: {}", e)
         };
 
         let client = Client {
-            name: "user".to_string()
+            name: "dev".to_string()
         };
         println!("cl_client::main::debug: Game is starting!");
         game.get_current_player_mut().end_turn();

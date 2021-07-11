@@ -214,6 +214,12 @@ impl PlayerArea {
             self.hand_id.insert(id_index, (card, CardStatus::new()));
         }
     }
+    pub fn draw_into_hand(&mut self) {
+        if let Some(card) = self.draw() {
+            let id = self.get_unused_hand_id();
+            self.hand_id.insert(id, (card, CardStatus::new()));
+        }
+    }
     fn get_unused_hand_id(&self) -> HandId {
         let mut id_index = 0;
         while self.hand_id.contains_key(&id_index) {
