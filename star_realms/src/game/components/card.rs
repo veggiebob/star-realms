@@ -3,6 +3,7 @@ use std::collections::{HashSet};
 use crate::game::components::{Defense, Coin};
 use crate::game::Goods;
 use crate::parse::parse_goods;
+use crate::game::effects::is_free_cond;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Card {
@@ -53,10 +54,7 @@ impl CardStatus {
         parse_goods(goods.as_str())
     }
     pub fn is_free(cond: &String) -> bool {
-        match cond.as_str() {
-            "any" | "free" => true,
-            _ => false
-        }
+        is_free_cond(cond)
     }
     pub fn use_effect(&mut self, effect: &(String, String)) {
         self.effects_used.insert(effect.clone());

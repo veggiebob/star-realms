@@ -11,7 +11,7 @@ use crate::game::components::{Authority, Coin, Combat};
 use crate::game::components::card::{Card, CardStatus};
 use crate::game::util::Failure;
 
-use crate::game::effects::{ConfigSupplier, get_condition, get_action};
+use crate::game::effects::{ConfigSupplier, get_condition, get_action, Config, ActionConfigMethod, is_trash_cond};
 use crate::game::util::Failure::{Succeed, Fail};
 
 pub mod components;
@@ -20,7 +20,7 @@ pub mod effects;
 mod util;
 
 type CardStack = Stack<Card>;
-type HandId = u32;
+pub type HandId = u32;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Goods {
@@ -209,10 +209,17 @@ impl PlayerArea {
                 id_index += 1;
             }
             if card.base.is_some() {
-                self.turn_data.to_be_discarded.insert(id_index);
+                self.plan_discard(&id_index).unwrap();
             }
             self.hand_id.insert(id_index, (card, CardStatus::new()));
         }
+    }
+    fn get_unused_hand_id(&self) -> HandId {
+        let mut id_index = 0;
+        while self.hand_id.contains_key(&id_index) {
+            id_index += 1;
+        }
+        id_index
     }
 
     /// Note: this may not ever be used because each card is handled differently
@@ -249,6 +256,27 @@ impl PlayerArea {
         self.goods.combat = 0; // todo: aggregate combat then deal it at the end of the turn
         self.turn_data.reset();
     }
+
+    /// Discard this card at the end of the turn.
+    /// Cards are planned to be discarded if they are drawn.
+    /// Err => not a valid id
+    /// (it's ok to plan_discard the same card more than once)
+    pub fn plan_discard(&mut self, id: &HandId) -> Result<(), ()> {
+        if self.hand_id.contains_key(id) {
+            self.turn_data.to_be_discarded.insert(*id);
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+    pub fn plan_scrap(&mut self, id: &HandId) -> Result<(), ()> {
+        if self.hand_id.contains_key(id) {
+            self.turn_data.to_be_scrapped.insert(*id);
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
     pub fn discard_by_id(&mut self, id: &u32) -> Failure<String> {
         match self.hand_id.remove(id) {
             Some((card, _)) => {
@@ -282,6 +310,9 @@ impl PlayerArea {
                 None
             }
         }
+    }
+    pub fn give_card_to_hand (&mut self, card: Card) {
+        self.hand_id.insert(self.get_unused_hand_id(), (card, CardStatus::new()));
     }
 }
 
@@ -402,11 +433,13 @@ impl GameState {
                 let mut cond = get_condition(cond_s.clone())
                     .expect(
                         format!(
-                            "GameState.advance(): bad selection condition {}", &cond_s)
+                            "GameState.advance(): bad selection condition {}. \
+                        It might be a good idea to validate cards before hand.", &cond_s)
                             .as_str());
                 let (action_meta, mut action_func) = get_action(&act_s)
                     .expect(
-                        format!("GameState.advance(): bad selection action {}", &act_s)
+                        format!("GameState.advance(): bad selection action {}. \
+                        It might be a good idea to validate cards before hand.", &act_s)
                             .as_str());
                 // evaluate the condition
                 if cond(self, &card_id) {
@@ -507,7 +540,27 @@ impl GameState {
                 Ok("Turn was ended".to_string())
             }
             AbstractPlayerAction::TrashCard => {
-                todo!("trash card abstract action")
+                let card_id = client.get_config(self, &Config {
+                    describe: Box::new(|_| "The card to be scrapped".to_string()),
+                    config_method: ActionConfigMethod::PickHandCard(
+                        RelativePlayer::Current,
+                        RelativePlayer::Current
+                    )
+                });
+                let (card, card_status) = self.get_current_player_mut()
+                    .get_card_in_hand_mut(&card_id)
+                    .unwrap_or_else(|| panic!("Client: supplied bad card id {}", &card_id));
+                if card.effects.iter().any(|(c, _)| is_trash_cond(c)) {
+                    card_status.scrapped = true;
+                    client.on_feedback(
+                        Feedback::Info(
+                            "This card's trash effect can now be used.".to_string()));
+                    Ok("Scrapped a card using the trash action".to_string())
+                } else {
+                    let s = "This card cannot be scrapped".to_string();
+                    client.on_feedback(Feedback::Invalid(s.clone()));
+                    Ok(s)
+                }
             }
         }
     }

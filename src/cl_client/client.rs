@@ -246,7 +246,7 @@ impl ConfigSupplier for Client {
             ActionConfigMethod::PickTradeRowCards(num, by) => {
                 println!("{:?}, pick {} of the trade row cards", by, num);
                 for (index, id) in game.trade_row.iter().enumerate() {
-                    println!(" {} - {}", index, game.card_library.as_card(id).name);
+                    println!(" {} - {}", Color::Blue.paint(index), game.card_library.as_card(id).name);
                 }
                 let mut sorted_trade_row = game.trade_row.elements.clone();
                 sorted_trade_row.sort();

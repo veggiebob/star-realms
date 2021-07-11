@@ -101,10 +101,25 @@ pub fn assert_validate_card_effects(card: &Card) {
     }
 }
 
+/// determines if an condition key string signals the "scrap" condition
+/// (appears as a trash can on the actual cards)
+pub fn is_trash_cond(cond: &String) -> bool {
+    if let "trash" | "scrap" = cond.as_str() {
+        true
+    } else {
+        false
+    }
+}
+pub fn is_free_cond(cond: &String) -> bool {
+    match cond.as_str() {
+        "any" | "free" => true,
+        _ => false
+    }
+}
 pub fn get_condition(name: String) -> Option<ConditionFunc> {
     match name.as_str() {
-        "any" | "free" => Some(Box::new(|_, _| true)),
-        "trash" | "scrap" => Some(Box::new(
+        _ if is_free_cond(&name) => Some(Box::new(|_, _| true)),
+        _ if is_trash_cond(&name) => Some(Box::new(
             |game, id| {
                 game.get_current_player().hand_id.get(id)
                     .expect("trash condition: bad id supplied")
