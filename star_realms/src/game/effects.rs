@@ -171,7 +171,7 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                                 config: None
                             },
                             Box::new(move |game, _| {
-                                for i in 0..n {
+                                for _ in 0..n {
                                     game.get_current_player_mut().draw_into_hand();
                                 }
                                 Succeed

@@ -222,7 +222,6 @@ card2:
         assert_eq!(cards, first_three);
     }
 
-    /// from this test passing I conclude that the memory problem is not the card library
     #[test]
     fn test_sizes () {
         println!("Size of String: {}", mem::size_of::<String>());

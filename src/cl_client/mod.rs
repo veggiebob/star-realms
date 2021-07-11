@@ -5,7 +5,7 @@ pub mod test;
 pub mod main {
     extern crate star_realms;
 
-    use self::star_realms::game::{GameState, Feedback};
+    use self::star_realms::game::{GameState};
     use crate::cl_client::client::Client;
     use ansi_term::Color;
 

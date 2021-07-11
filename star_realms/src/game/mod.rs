@@ -122,10 +122,10 @@ pub trait UserActionSupplier {
 
     fn choose_abstract_action(&self, game: &GameState) -> AbstractPlayerAction;
 
-    fn select_effect(&self, game: &GameState) -> UserActionIntent<(u32, (String, String))>;
+    fn select_effect(&self, game: &GameState) -> UserActionIntent<(HandId, (String, String))>;
 
     /// return 0 to attempt to buy an explorer
-    fn select_trade_row_card(&self, game: &GameState) -> UserActionIntent<u32>;
+    fn select_trade_row_card(&self, game: &GameState) -> UserActionIntent<HandId>;
 
     fn on_feedback(&self, feedback: Feedback);
 }
@@ -160,7 +160,7 @@ impl PlayerArea {
         pa
     }
 
-    pub fn get_all_hand_card_ids(&self) -> HashSet<u32> {
+    pub fn get_all_hand_card_ids(&self) -> HashSet<HandId> {
         let mut set = HashSet::new();
         for (k, _) in self.hand_id.iter() {
             set.insert(*k);
@@ -169,7 +169,7 @@ impl PlayerArea {
     }
 
     /// panic if there are more bits than cards in `hand_ids`
-    pub fn unpack_multi_card_id(&self, bit_flagged: u32) -> HashSet<u32> {
+    pub fn unpack_multi_card_id(&self, bit_flagged: u32) -> HashSet<HandId> {
         let mut ids = HashSet::new();
         let num_cards = f32::log2(bit_flagged as f32).ceil() as u32;
         // println!("unpacking: {}", bit_flagged);
@@ -191,10 +191,10 @@ impl PlayerArea {
         ids
     }
 
-    pub fn get_card_in_hand(&self, id: &u32) -> Option<&(Card, CardStatus)> {
+    pub fn get_card_in_hand(&self, id: &HandId) -> Option<&(Card, CardStatus)> {
         self.hand_id.get(id)
     }
-    pub fn get_card_in_hand_mut(&mut self, id: &u32) -> Option<&mut (Card, CardStatus)> {
+    pub fn get_card_in_hand_mut(&mut self, id: &HandId) -> Option<&mut (Card, CardStatus)> {
         self.hand_id.get_mut(id)
     }
     pub fn draw_hand(&mut self, num_cards: u8) {
@@ -283,7 +283,7 @@ impl PlayerArea {
             Err(())
         }
     }
-    pub fn discard_by_id(&mut self, id: &u32) -> Failure<String> {
+    pub fn discard_by_id(&mut self, id: &HandId) -> Failure<String> {
         match self.hand_id.remove(id) {
             Some((card, _)) => {
                 self.discard.add(card);
@@ -292,7 +292,7 @@ impl PlayerArea {
             None => Failure::Fail(format!("cannot discard card by id {}!", id))
         }
     }
-    pub fn scrap_by_id(&mut self, id: &u32) -> Failure<String> {
+    pub fn scrap_by_id(&mut self, id: &HandId) -> Failure<String> {
         match self.hand_id.remove(id) {
             Some((card, _)) => {
                 self.scrapped.add(card);

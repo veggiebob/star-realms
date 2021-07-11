@@ -1,11 +1,9 @@
-use star_realms::game::{UserActionSupplier, Feedback, GameState, UserActionIntent, RelativePlayer, PlayerArea, AbstractPlayerAction};
+use star_realms::game::{UserActionSupplier, Feedback, GameState, UserActionIntent, RelativePlayer, AbstractPlayerAction};
 use std::collections::{HashSet, HashMap};
 use star_realms::game::effects::{ConfigSupplier, Config, ActionConfigMethod, get_condition};
 use std::io;
-use std::io::Error;
 use std::str::FromStr;
 use ansi_term::Color;
-use std::fmt::Display;
 use star_realms::game::components::card::CardStatus;
 
 pub struct Client {
@@ -63,7 +61,7 @@ impl Client {
     }
 }
 impl UserActionSupplier for Client {
-    fn choose_abstract_action(&self, game: &GameState) -> AbstractPlayerAction {
+    fn choose_abstract_action(&self, _game: &GameState) -> AbstractPlayerAction {
         println!("Select an action:");
         let options = vec![
             "Use effects on cards",
@@ -165,14 +163,6 @@ impl UserActionSupplier for Client {
     }
 }
 
-fn summarize_hand(player: &PlayerArea) -> String {
-    let mut str = String::new();
-    for id in player.get_all_hand_card_ids().iter() {
-        str += format!(" {} - {}\n", id, player.get_card_in_hand(id).unwrap().0.name.clone()).as_str();
-    }
-    str
-}
-
 fn print_options<T: ToString>(options: &Vec<T>) {
     for (index, element) in options.iter().enumerate() {
         println!(" {} - {}", Color::Blue.paint(index.to_string()), element.to_string());
@@ -187,12 +177,12 @@ fn input() -> String {
 
 /// Ensure that standard input results in a value that is satisfied by `valid`,
 /// using parsed strings and io interaction
-pub fn get_value_input<T: FromStr, U: FnMut(&T) -> bool>(mut valid: U) -> T {
+pub fn get_value_input<T: FromStr, U: FnMut(&T) -> bool>(valid: U) -> T {
     ensure(
         input,
         |s| s.parse(),
         valid,
-        |e| println!("invalid input"),
+        |_| println!("invalid input"),
         |s| println!("invalid input of '{:?}'", s)
     )
 }
