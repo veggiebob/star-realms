@@ -8,3 +8,30 @@ port_of_call:
   effects:
     - trash: draw
     - trash: destroy target base
+
+blob_carrier:
+  cost: 6
+  synergy:
+    - b
+  base: false
+  effects:
+    - free: G0.0.7
+    - syn-b: acquire no cost
+
+stealth_needle:
+  cost: 4
+  synergy:
+    - m
+  base: false
+  effects:
+    - free: stealth needle
+
+battlecruiser:
+  cost: 6
+  base: false
+  synergy:
+    - s
+  effects:
+    - free: G0.0.5
+    - free: draw
+    - syn-s: discard

@@ -131,6 +131,7 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, String> {
     })
 }
 
+/// example: G0.0.1
 pub fn parse_goods(good_str: &str) -> Option<Goods> {
     // Remember: C.A.T
 

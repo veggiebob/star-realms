@@ -1,6 +1,6 @@
 use std::ops::{AddAssign, Add};
-use crate::game::{Goods, GameState, RelativePlayer};
-use crate::game::util::Failure::Succeed;
+use crate::game::{Goods, GameState, RelativePlayer, HandId};
+use crate::game::util::Failure::{Succeed, Fail};
 use crate::game::util::Failure;
 use crate::game::RelativePlayer::Opponent;
 use crate::game::components::card::{Base, Card};
@@ -8,6 +8,8 @@ use std::collections::HashSet;
 use crate::parse::parse_goods;
 use std::fmt::{Display, Formatter};
 use ansi_term::Color;
+use crate::game::components::faction::Faction;
+use std::rc::Rc;
 
 /// Effects!
 
@@ -126,6 +128,7 @@ pub fn get_condition(name: String) -> Option<ConditionFunc> {
                     .1.scrapped
             }
         )),
+        // example: "syn t" for synergy with Trade Federation
         _ if name.starts_with("syn") => Some(Box::new({
                 let n = name.clone();
                 move |game, id| match &(n.as_str()[n.len()-1..].parse()) {
@@ -266,6 +269,70 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                                 }
                             }
                         }
+                    }
+                })
+            )
+        ),
+        "stealth needle" => Some(
+            (
+                ActionMeta {
+                    description: "Copy any other ship in your hand".to_string(),
+                    config: Some(Config {
+                        describe: Box::new(|_| "The card to copy".to_string()),
+                        config_method: ActionConfigMethod::PickHandCard(
+                            RelativePlayer::Current,
+                            RelativePlayer::Current
+                        )
+                    })
+                },
+                Box::new(|game, cfg: HandId| {
+                    // turns out this is not actually a problem if you select another stealth
+                    // needle or itself
+                    // because even though you can theoretically get an infinite amount of
+                    // stealth needles, you cannot actually
+                    // increase the number of non-stealth needle
+                    // cards that you can copy
+                    // so it's not really a loophole
+                    // unless you crash the game from a memory overflow?
+                    let card = match game
+                        .get_current_player()
+                        .get_card_in_hand(&cfg) {
+                        Some((c, _)) => c,
+                        None => return Fail("Not a valid id".to_string())
+                    };
+                    let mut card = card.clone();
+                    card.synergizes_with.insert(Faction::Mech);
+                    let id = game.get_current_player_mut().give_card_to_hand(card);
+                    game.get_current_player_mut().plan_scrap(&id).unwrap();
+                    Succeed
+                })
+            )
+        ),
+        "acquire no cost" => Some(
+            (
+                ActionMeta {
+                    description: "Acquire any ship without paying \
+                        its cost and put it on top of your deck".to_string(),
+                    config: Some(Config {
+                        describe: Box::new(|_| "The ship to acquire".to_string()),
+                        config_method: ActionConfigMethod::Range(0, 4)
+                    })
+                },
+                Box::new(|game, cfg| {
+                    let cl = Rc::clone(&game.card_library);
+                    match game.trade_row.remove(cfg as usize) {
+                        Some(id) => {
+                            let card = cl.as_card(&id);
+                            if let None = card.base {
+                                game.get_current_player_mut().deck.add((*card).clone());
+                                Succeed
+                            } else {
+                                // make sure to add it back
+                                game.trade_row.add(id);
+                                Fail("Cannot be a base".to_string())
+                            }
+                        },
+                        None => Fail("Not a valid id".to_string())
                     }
                 })
             )

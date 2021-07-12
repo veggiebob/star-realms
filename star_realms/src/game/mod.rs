@@ -208,10 +208,11 @@ impl PlayerArea {
             while self.hand_id.contains_key(&id_index) {
                 id_index += 1;
             }
-            if card.base.is_some() {
+            let is_ship = card.base.is_none();
+            self.hand_id.insert(id_index.clone(), (card, CardStatus::new()));
+            if is_ship {
                 self.plan_discard(&id_index).unwrap();
             }
-            self.hand_id.insert(id_index, (card, CardStatus::new()));
         }
     }
     pub fn draw_into_hand(&mut self) {
@@ -228,23 +229,6 @@ impl PlayerArea {
         id_index
     }
 
-    /// Note: this may not ever be used because each card is handled differently
-    /// at the end of a turn. It might be scrapped, discarded, or kept (bases)
-    fn discard_hand(&mut self) {
-        let keys_vec = {
-            let mut tmp = vec![];
-            let keys = self.hand_id.keys();
-            for id in keys {
-                tmp.push(*id);
-            }
-            tmp
-        };
-        for id in keys_vec {
-            if let Failure::Fail(err) = self.discard_by_id(&id) {
-                panic!("PlayerArea::discard_hand: {}", err);
-            }
-        }
-    }
     pub fn end_turn(&mut self) {
         let to_be_scrapped = self.turn_data.to_be_scrapped.clone();
         for id in to_be_scrapped {
@@ -267,22 +251,32 @@ impl PlayerArea {
     /// Cards are planned to be discarded if they are drawn.
     /// Err => not a valid id
     /// (it's ok to plan_discard the same card more than once)
-    pub fn plan_discard(&mut self, id: &HandId) -> Result<(), ()> {
+    pub fn plan_discard(&mut self, id: &HandId) -> Result<(), String> {
         if self.hand_id.contains_key(id) {
-            self.turn_data.to_be_discarded.insert(*id);
-            Ok(())
+            if self.turn_data.to_be_scrapped.contains(id) {
+                Err("This card is going to be scrapped, it cannot be discarded.".to_string())
+            } else {
+                self.turn_data.to_be_discarded.insert(*id);
+                Ok(())
+            }
         } else {
-            Err(())
+            Err(format!("This card ({}) does not exist, it cannot be discarded.", &id))
         }
     }
-    pub fn plan_scrap(&mut self, id: &HandId) -> Result<(), ()> {
+
+    pub fn plan_scrap(&mut self, id: &HandId) -> Result<(), String> {
         if self.hand_id.contains_key(id) {
-            self.turn_data.to_be_scrapped.insert(*id);
-            Ok(())
+            if self.turn_data.to_be_discarded.contains(id) {
+                Err("This card is going to be discarded, it cannot be scrapped.".to_string())
+            } else {
+                self.turn_data.to_be_scrapped.insert(*id);
+                Ok(())
+            }
         } else {
-            Err(())
+            Err(format!("This card ({}) does not exist, it cannot be scrapped.", &id))
         }
     }
+
     pub fn discard_by_id(&mut self, id: &HandId) -> Failure<String> {
         match self.hand_id.remove(id) {
             Some((card, _)) => {
@@ -317,8 +311,10 @@ impl PlayerArea {
             }
         }
     }
-    pub fn give_card_to_hand (&mut self, card: Card) {
-        self.hand_id.insert(self.get_unused_hand_id(), (card, CardStatus::new()));
+    pub fn give_card_to_hand (&mut self, card: Card) -> HandId {
+        let id = self.get_unused_hand_id();
+        self.hand_id.insert(id.clone(), (card, CardStatus::new()));
+        id
     }
 }
 

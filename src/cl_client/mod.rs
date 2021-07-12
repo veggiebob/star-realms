@@ -42,9 +42,11 @@ pub mod main {
             name: "dev".to_string()
         };
         println!("cl_client::main::debug: Game is starting!");
-        game.get_current_player_mut().end_turn();
-        let explorer = (*game.card_library.get_explorer().unwrap()).clone();
-        game.get_current_player_mut().give_card_to_hand(explorer);
+        // game.get_current_player_mut().end_turn();
+        // let explorer = (*game.card_library.get_explorer().unwrap()).clone();
+        // game.get_current_player_mut().give_card_to_hand(explorer);
+        let stealth_needle = (*game.card_library.get_card_by_name("stealth_needle").unwrap()).clone();
+        game.get_current_player_mut().give_card_to_hand(stealth_needle);
         loop {
             let result = game.advance(&client);
             match result {

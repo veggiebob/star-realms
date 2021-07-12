@@ -61,20 +61,31 @@ impl Client {
     }
 }
 impl UserActionSupplier for Client {
-    fn choose_abstract_action(&self, _game: &GameState) -> AbstractPlayerAction {
+    fn choose_abstract_action(&self, game: &GameState) -> AbstractPlayerAction {
         println!("Select an action:");
         let options = vec![
             "Use effects on cards",
             "View trade row",
             "Trash a card",
-            "End Turn"
+            "End Turn",
+            "View cards in hand"
             ];
         print_options(&options);
-        match get_value_input(|&i: &u8| i < 4) {
+        match get_value_input(|&i: &u8| i < options.len() as u8) {
             0 => AbstractPlayerAction::CardEffects,
             1 => AbstractPlayerAction::TradeRow,
             2 => AbstractPlayerAction::TrashCard,
-            3 | _ => AbstractPlayerAction::EndTurn,
+            3 => AbstractPlayerAction::EndTurn,
+            4 | _ => {
+                // this is mostly a debug option, so it's not going to have any real implementation
+                let ids = game.get_current_player().get_all_hand_card_ids().clone();
+                let player = game.get_current_player();
+                for id in ids {
+                    let (card, _) = player.get_card_in_hand(&id).unwrap();
+                    println!(" - {}: {}", id, card.name);
+                }
+                self.choose_abstract_action(game)
+            }
         }
     }
     fn select_effect(&self, game: &GameState) -> UserActionIntent<(u32, (String, String))> {
@@ -143,10 +154,11 @@ impl UserActionSupplier for Client {
         if game.explorers > 0 {
             println!(" {} - explorer ({} left)", Color::Blue.paint("0"), game.explorers);
         }
-        let index = 1;
+        let mut index = 1;
         for id in game.trade_row.elements.iter() {
             let card = game.card_library.as_card(id);
             println!(" {} - {} ({})", Color::Blue.paint(index.to_string()), card.name, Color::Yellow.paint(card.cost.to_string()));
+            index += 1;
         }
         UserActionIntent::Continue(get_value_input(|&i| {
             i <= game.trade_row.len() as u32 && (i > 0 || game.explorers > 0)
