@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 star_realms = { path="star_realms" }
+ansi_term = "0.12.1"

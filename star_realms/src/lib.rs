@@ -190,7 +190,38 @@ card2:
         });
     }
 
-    /// from this test passing I conclude that the memory problem is not the card library
+    #[test]
+    fn test_multi_card_encoding () {
+        let mut player = PlayerArea::new(Card {
+            cost: 1,
+            name: "Scout Mock".to_string(),
+            base: None,
+            synergizes_with: Default::default(),
+            effects: Default::default()
+        },
+        Card {
+            cost: 1,
+            name: "Viper Mock".to_string(),
+            base: None,
+            synergizes_with: Default::default(),
+            effects: Default::default()
+        }, false);
+        player.draw_hand(5);
+        let cfg = 0b111 as u32; // pick the first three
+        let first_three = {
+            let ids = player.get_all_hand_card_ids();
+            let mut hand_ids: Vec<_> = ids.iter().collect();
+            hand_ids.sort();
+            let mut set = HashSet::new();
+            for i in 0..3 {
+                set.insert(*hand_ids[i]); // insert the first three
+            }
+            set
+        };
+        let cards = player.unpack_multi_card_id(cfg);
+        assert_eq!(cards, first_three);
+    }
+
     #[test]
     fn test_sizes () {
         println!("Size of String: {}", mem::size_of::<String>());

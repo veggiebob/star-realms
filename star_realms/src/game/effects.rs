@@ -1,11 +1,15 @@
 use std::ops::{AddAssign, Add};
-use crate::game::{Goods, GameState, RelativePlayer};
-use crate::game::util::Failure::Succeed;
+use crate::game::{Goods, GameState, RelativePlayer, HandId};
+use crate::game::util::Failure::{Succeed, Fail};
 use crate::game::util::Failure;
 use crate::game::RelativePlayer::Opponent;
 use crate::game::components::card::{Base, Card};
 use std::collections::HashSet;
 use crate::parse::parse_goods;
+use std::fmt::{Display, Formatter};
+use ansi_term::Color;
+use crate::game::components::faction::Faction;
+use std::rc::Rc;
 
 /// Effects!
 
@@ -37,21 +41,28 @@ pub trait ConfigSupplier {
 // a sibling to ActionConfigMethod
 pub enum ActionConfigMethod {
     /// low: u32, high: u32
-    /// config should be a number in the range (low..high)
+    /// config should be a number in the range [low..high] inclusive
     Range(u32, u32),
-    /// set: contains all the id's that can be used
+
+    /// set: contains all the id's that are possible: one is chosen
     Set(HashSet<u32>), // in this set of numbers
+
     /// num: u32, by: Player, from: Player
     /// num = number of cards to pick
     /// by = player that is picking the cards
     /// from = player that is having cards be picked from
     /// config should be a bitwise-encoded number representing the cards that can be selected
     PickHandCards(u32, RelativePlayer, RelativePlayer),
+
     /// config should be the id of the card that can be picked
     /// by: Player, from: player
     /// by = player that is picking the cards
     /// from = player that is having cards be picked from
     PickHandCard(RelativePlayer, RelativePlayer),
+
+    /// num: u32, by: u32
+    /// num = number of trade row cards to pick
+    /// by = player that is picking them
     PickTradeRowCards(u32, RelativePlayer)
 }
 
@@ -99,16 +110,32 @@ pub fn assert_validate_card_effects(card: &Card) {
     }
 }
 
+/// determines if an condition key string signals the "scrap" condition
+/// (appears as a trash can on the actual cards)
+pub fn is_trash_cond(cond: &String) -> bool {
+    if let "trash" | "scrap" = cond.as_str() {
+        true
+    } else {
+        false
+    }
+}
+pub fn is_free_cond(cond: &String) -> bool {
+    match cond.as_str() {
+        "any" | "free" => true,
+        _ => false
+    }
+}
 pub fn get_condition(name: String) -> Option<ConditionFunc> {
     match name.as_str() {
-        "any" | "free" => Some(Box::new(|_, _| true)),
-        "trash" | "scrap" => Some(Box::new(
+        _ if is_free_cond(&name) => Some(Box::new(|_, _| true)),
+        _ if is_trash_cond(&name) => Some(Box::new(
             |game, id| {
                 game.get_current_player().hand_id.get(id)
                     .expect("trash condition: bad id supplied")
                     .1.scrapped
             }
         )),
+        // example: "syn t" for synergy with Trade Federation
         _ if name.starts_with("syn") => Some(Box::new({
                 let n = name.clone();
                 move |game, id| match &(n.as_str()[n.len()-1..].parse()) {
@@ -127,9 +154,9 @@ pub fn get_condition(name: String) -> Option<ConditionFunc> {
 pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
     // signal to be a good
     if name.starts_with("G") {
-        return if let Some(goods) = parse_goods(name.as_str()) {
+        if let Some(goods) = parse_goods(name.as_str()) {
             let action = get_good_action(goods);
-            Some(
+            return Some(
                 (
                     ActionMeta {
                         description: "gives some amount of trade, authority, and combat".to_string(),
@@ -138,8 +165,107 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                     action
                 )
             )
-        } else {
-            None
+        }
+    }
+    let pattern = regex::Regex::new(r"draw(\s\d)?").unwrap();
+    if pattern.is_match(name.as_str()) {
+        if let Some(captures) = pattern.captures(name) {
+            if let Some(n) = captures.get(1) {
+                if let Ok(n) = n.as_str().parse::<u32>() {
+                    return Some(
+                        (
+                            ActionMeta {
+                                description: format!("Draw {} cards from your deck", &n),
+                                config: None
+                            },
+                            Box::new(move |game, _| {
+                                for _ in 0..n {
+                                    game.get_current_player_mut().draw_into_hand();
+                                }
+                                Succeed
+                            })
+                        )
+                    )
+                }
+            } else {
+                return Some(
+                    (
+                        ActionMeta {
+                            description: "Draw a card from your deck".to_string(),
+                            config: None
+                        },
+                        Box::new(|game, _| {
+                            game.get_current_player_mut().draw_into_hand();
+                            Succeed
+                        })
+                    )
+                )
+            }
+        }
+    }
+    let pattern = regex::Regex::new(r"scrap trade row( \d)?").unwrap();
+    if pattern.is_match(name.as_str()) {
+        if let Some(captures) = pattern.captures(name) {
+            match captures.get(1) {
+                Some(n) => {
+                    let n = n.as_str().parse::<u32>().unwrap();
+                    let n_copy = n.clone();
+                    return Some(
+                        (
+                            ActionMeta {
+                                description: format!(
+                                    "Scrap up to {} cards in the trade row",
+                                    n.clone()
+                                ),
+                                config: Some(Config {
+                                    describe: Box::new(move |_: u32| format!(
+                                        "Choosing {} cards to scrap in the trade row",
+                                        n_copy
+                                    )),
+                                    config_method: ActionConfigMethod::PickTradeRowCards(
+                                        n.clone(),
+                                        RelativePlayer::Current
+                                    )
+                                }),
+                            },
+                            Box::new(|game, cfg| {
+                                let cards = game.unpack_multi_trade_row_card_selection(&cfg);
+                                let cards = game.remove_cards_from_trade_row(cards);
+                                for c in cards {
+                                    game.scrapped.add(c);
+                                }
+                                // todo: AAAA MAGIC NUMBERS
+                                game.fill_trade_row(5);
+                                Succeed
+                            })
+                            )
+                    )
+                },
+                None => {
+                    return Some(
+                        (
+                            ActionMeta {
+                                description: "Scrap a card in the trade row".to_string(),
+                                config: Some(Config {
+                                    describe: Box::new(|_| "Pick a card from the trade row".to_string()),
+                                    config_method: ActionConfigMethod::PickTradeRowCards(1, RelativePlayer::Current)
+                                })
+                            },
+                            Box::new(|game, cfg| {
+                                // same implementation even though it's just one card, idc
+                                let cards = game.unpack_multi_trade_row_card_selection(&cfg);
+                                let cards = game.remove_cards_from_trade_row(cards);
+                                for c in cards {
+                                    game.scrapped.add(c);
+                                }
+                                // todo: AAAA MAGIC NUMBERS
+                                game.fill_trade_row(5);
+                                Succeed
+                            })
+                        )
+                    )
+                }
+            }
         }
     }
     match name.as_str() {
@@ -208,13 +334,118 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                             } else {
                                 match opponent.discard_by_id(&cfg) {
                                     Succeed => Succeed,
-                                    Failure::Fail(msg) => Failure::Fail(format!("Unable to discard this card because: {}", msg))
+                                    Failure::Fail(msg) => Failure::Fail(
+                                        format!("Unable to discard this card because: {}", msg))
                                 }
                             }
                         }
                     }
                 })
             )
+        ),
+        "stealth needle" => Some(
+            (
+                ActionMeta {
+                    description: "Copy any other ship in your hand".to_string(),
+                    config: Some(Config {
+                        describe: Box::new(|_| "The card to copy".to_string()),
+                        config_method: ActionConfigMethod::PickHandCard(
+                            RelativePlayer::Current,
+                            RelativePlayer::Current
+                        )
+                    })
+                },
+                Box::new(|game, cfg: HandId| {
+                    // turns out this is not actually a problem if you select another stealth
+                    // needle or itself
+                    // because even though you can theoretically get an infinite amount of
+                    // stealth needles, you cannot actually
+                    // increase the number of non-stealth needle
+                    // cards that you can copy
+                    // so it's not really a loophole
+                    // unless you crash the game from a memory overflow?
+                    let card = match game
+                        .get_current_player()
+                        .get_card_in_hand(&cfg) {
+                        Some((c, _)) => c,
+                        None => return Fail("Not a valid id".to_string())
+                    };
+                    let mut card = card.clone();
+                    card.synergizes_with.insert(Faction::Mech);
+                    let id = game.get_current_player_mut().give_card_to_hand(card);
+                    game.get_current_player_mut().plan_scrap(&id).unwrap();
+                    Succeed
+                })
+            )
+        ),
+        "acquire no cost" => Some(
+            (
+                ActionMeta {
+                    description: "Acquire any ship without paying \
+                        its cost and put it on top of your deck".to_string(),
+                    config: Some(Config {
+                        describe: Box::new(|_| "The ship to acquire".to_string()),
+                        config_method: ActionConfigMethod::Range(0, 4)
+                    })
+                },
+                Box::new(|game, cfg| {
+                    let cl = Rc::clone(&game.card_library);
+                    match game.trade_row.remove(cfg as usize) {
+                        Some(id) => {
+                            let card = cl.as_card(&id);
+                            if let None = card.base {
+                                game.get_current_player_mut().deck.add((*card).clone());
+                                Succeed
+                            } else {
+                                // make sure to add it back
+                                game.trade_row.add(id);
+                                Fail("Cannot be a base".to_string())
+                            }
+                        },
+                        None => Fail("Not a valid id".to_string())
+                    }
+                })
+            )
+        ),
+        "merc cruiser" => Some(
+            (
+                ActionMeta {
+                    description: "Choose a faction as you play Merc Cruiser.\
+                     Merc Cruiser has that faction.".to_string(),
+                    config: Some(Config {
+                        describe: Box::new(|i| match i {
+                            0 => "Mech faction",
+                            1 => "Fed faction",
+                            2 => "Blob faction",
+                            3 | _ => "Star faction",
+                        }.to_string()),
+                        config_method: ActionConfigMethod::Range(0, 3)
+                    })
+                },
+                Box::new(|game, cfg| {
+                    let faction = match cfg {
+                        0 => Faction::Mech,
+                        1 => Faction::Fed,
+                        2 => Faction::Blob,
+                        3 | _ => Faction::Star
+                    };
+                    let card = Card {
+                        cost: 0,
+                        name: "synergy card".to_string(),
+
+                        base: None,
+                        synergizes_with: {
+                            let mut tmp = HashSet::new();
+                            tmp.insert(faction);
+                            tmp
+                        },
+                        effects: HashSet::new()
+                    };
+                    let id = game.get_current_player_mut().give_card_to_hand(card);
+                    game.get_current_player_mut().plan_scrap(&id).unwrap();
+                    Succeed
+                })
+                )
         ),
         _ => None
     }
@@ -252,5 +483,14 @@ impl AddAssign for Goods {
         self.trade += rhs.trade;
         self.authority += rhs.authority;
         self.combat += rhs.combat;
+    }
+}
+
+impl Display for Goods {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<{}> <{}> <{}>",
+            Color::Yellow.paint(self.trade.to_string()),
+            Color::Blue.paint(self.authority.to_string()),
+            Color::Red.paint(self.combat.to_string()))
     }
 }

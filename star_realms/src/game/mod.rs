@@ -11,7 +11,7 @@ use crate::game::components::{Authority, Coin, Combat};
 use crate::game::components::card::{Card, CardStatus};
 use crate::game::util::Failure;
 
-use crate::game::effects::{ConfigSupplier, get_condition, get_action};
+use crate::game::effects::{ConfigSupplier, get_condition, get_action, Config, ActionConfigMethod, is_trash_cond};
 use crate::game::util::Failure::{Succeed, Fail};
 
 pub mod components;
@@ -20,7 +20,7 @@ pub mod effects;
 mod util;
 
 type CardStack = Stack<Card>;
-type HandId = u32;
+pub type HandId = u32;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Goods {
@@ -122,10 +122,10 @@ pub trait UserActionSupplier {
 
     fn choose_abstract_action(&self, game: &GameState) -> AbstractPlayerAction;
 
-    fn select_effect(&self, game: &GameState) -> UserActionIntent<(u32, (String, String))>;
+    fn select_effect(&self, game: &GameState) -> UserActionIntent<(HandId, (String, String))>;
 
     /// return 0 to attempt to buy an explorer
-    fn select_trade_row_card(&self, game: &GameState) -> UserActionIntent<u32>;
+    fn select_trade_row_card(&self, game: &GameState) -> UserActionIntent<HandId>;
 
     fn on_feedback(&self, feedback: Feedback);
 }
@@ -160,17 +160,41 @@ impl PlayerArea {
         pa
     }
 
-    pub fn get_all_hand_card_ids(&self) -> HashSet<u32> {
+    pub fn get_all_hand_card_ids(&self) -> HashSet<HandId> {
         let mut set = HashSet::new();
         for (k, _) in self.hand_id.iter() {
             set.insert(*k);
         }
         set
     }
-    pub fn get_card_in_hand(&self, id: &u32) -> Option<&(Card, CardStatus)> {
+
+    /// panic if there are more bits than cards in `hand_ids`
+    pub fn unpack_multi_card_id(&self, bit_flagged: u32) -> HashSet<HandId> {
+        let mut ids = HashSet::new();
+        let num_cards = f32::log2(bit_flagged as f32).ceil() as u32;
+        // println!("unpacking: {}", bit_flagged);
+        // println!("there are {} cards", num_cards);
+        let hand_ids = self.get_all_hand_card_ids();
+        let sorted_ids = {
+            let mut tmp: Vec<_> = hand_ids.iter().collect();
+            tmp.sort();
+            tmp
+        };
+        if num_cards as usize > sorted_ids.len() {
+            panic!("Bit flag contained more bits than there are cards in the hand!");
+        }
+        for i in 0..num_cards {
+            if ((1<<i) & bit_flagged) > 0 {
+                ids.insert(*sorted_ids[i as usize]);
+            }
+        }
+        ids
+    }
+
+    pub fn get_card_in_hand(&self, id: &HandId) -> Option<&(Card, CardStatus)> {
         self.hand_id.get(id)
     }
-    pub fn get_card_in_hand_mut(&mut self, id: &u32) -> Option<&mut (Card, CardStatus)> {
+    pub fn get_card_in_hand_mut(&mut self, id: &HandId) -> Option<&mut (Card, CardStatus)> {
         self.hand_id.get_mut(id)
     }
     pub fn draw_hand(&mut self, num_cards: u8) {
@@ -184,30 +208,27 @@ impl PlayerArea {
             while self.hand_id.contains_key(&id_index) {
                 id_index += 1;
             }
-            if card.base.is_some() {
-                self.turn_data.to_be_discarded.insert(id_index);
+            let is_ship = card.base.is_none();
+            self.hand_id.insert(id_index.clone(), (card, CardStatus::new()));
+            if is_ship {
+                self.plan_discard(&id_index).unwrap();
             }
-            self.hand_id.insert(id_index, (card, CardStatus::new()));
         }
+    }
+    pub fn draw_into_hand(&mut self) {
+        if let Some(card) = self.draw() {
+            let id = self.get_unused_hand_id();
+            self.hand_id.insert(id, (card, CardStatus::new()));
+        }
+    }
+    fn get_unused_hand_id(&self) -> HandId {
+        let mut id_index = 0;
+        while self.hand_id.contains_key(&id_index) {
+            id_index += 1;
+        }
+        id_index
     }
 
-    /// Note: this may not ever be used because each card is handled differently
-    /// at the end of a turn. It might be scrapped, discarded, or kept (bases)
-    fn discard_hand(&mut self) {
-        let keys_vec = {
-            let mut tmp = vec![];
-            let keys = self.hand_id.keys();
-            for id in keys {
-                tmp.push(*id);
-            }
-            tmp
-        };
-        for id in keys_vec {
-            if let Failure::Fail(err) = self.discard_by_id(&id) {
-                panic!("PlayerArea::discard_hand: {}", err);
-            }
-        }
-    }
     pub fn end_turn(&mut self) {
         let to_be_scrapped = self.turn_data.to_be_scrapped.clone();
         for id in to_be_scrapped {
@@ -221,11 +242,50 @@ impl PlayerArea {
                 panic!("PlayerArea::end_turn: {}", err);
             }
         }
+        // if it's not being scrapped or discarded, I suppose we can reset the effects used?
+        for (_, (card, card_status)) in self.hand_id.iter_mut() {
+            if let None = card.base {
+                panic!("PlayerArea::end_turn: how is there a ship that \
+                    hasn't been discarded or scrapped at the end of the turn?");
+            }
+            card_status.reset_base();
+        }
         self.goods.trade = 0;
         self.goods.combat = 0; // todo: aggregate combat then deal it at the end of the turn
         self.turn_data.reset();
     }
-    pub fn discard_by_id(&mut self, id: &u32) -> Failure<String> {
+
+    /// Discard this card at the end of the turn.
+    /// Cards are planned to be discarded if they are drawn.
+    /// Err => not a valid id
+    /// (it's ok to plan_discard the same card more than once)
+    pub fn plan_discard(&mut self, id: &HandId) -> Result<(), String> {
+        if self.hand_id.contains_key(id) {
+            if self.turn_data.to_be_scrapped.contains(id) {
+                Err("This card is going to be scrapped, it cannot be discarded.".to_string())
+            } else {
+                self.turn_data.to_be_discarded.insert(*id);
+                Ok(())
+            }
+        } else {
+            Err(format!("This card ({}) does not exist, it cannot be discarded.", &id))
+        }
+    }
+
+    pub fn plan_scrap(&mut self, id: &HandId) -> Result<(), String> {
+        if self.hand_id.contains_key(id) {
+            if self.turn_data.to_be_discarded.contains(id) {
+                Err("This card is going to be discarded, it cannot be scrapped.".to_string())
+            } else {
+                self.turn_data.to_be_scrapped.insert(*id);
+                Ok(())
+            }
+        } else {
+            Err(format!("This card ({}) does not exist, it cannot be scrapped.", &id))
+        }
+    }
+
+    pub fn discard_by_id(&mut self, id: &HandId) -> Failure<String> {
         match self.hand_id.remove(id) {
             Some((card, _)) => {
                 self.discard.add(card);
@@ -234,7 +294,7 @@ impl PlayerArea {
             None => Failure::Fail(format!("cannot discard card by id {}!", id))
         }
     }
-    pub fn scrap_by_id(&mut self, id: &u32) -> Failure<String> {
+    pub fn scrap_by_id(&mut self, id: &HandId) -> Failure<String> {
         match self.hand_id.remove(id) {
             Some((card, _)) => {
                 self.scrapped.add(card);
@@ -258,6 +318,11 @@ impl PlayerArea {
                 None
             }
         }
+    }
+    pub fn give_card_to_hand (&mut self, card: Card) -> HandId {
+        let id = self.get_unused_hand_id();
+        self.hand_id.insert(id.clone(), (card, CardStatus::new()));
+        id
     }
 }
 
@@ -300,6 +365,32 @@ impl GameState {
             }
         }
     }
+
+    pub fn unpack_multi_trade_row_card_selection(&self, bits: &u32) -> HashSet<u32> {
+        let mut ids = HashSet::new();
+        let num_cards = self.trade_row.len();
+        for i in 0..num_cards {
+            if ((1<<i) & bits) > 0 {
+                ids.insert(i as u32);
+            }
+        }
+        ids
+    }
+
+    /// ids: the indices of the cards to be removed
+    pub fn remove_cards_from_trade_row(&mut self, ids: HashSet<u32>) -> HashSet<Card> {
+        let mut ids: Vec<_> = ids.iter().collect();
+        ids.sort();
+        ids.reverse(); // remove them from biggest to smallest to prevent shifting
+        let mut cards = HashSet::new();
+        for i in ids {
+            let id = self.trade_row.remove(*i as usize)
+                .ok_or(format!("{} is not a valid index in the trade row", i)).unwrap();
+            cards.insert((*self.card_library.get_card_by_id(&id).unwrap()).clone());
+        }
+        cards
+    }
+
     fn flip_turn(&mut self) {
         self.current_player = match self.current_player {
             Player::Player1 => Player::Player2,
@@ -378,11 +469,13 @@ impl GameState {
                 let mut cond = get_condition(cond_s.clone())
                     .expect(
                         format!(
-                            "GameState.advance(): bad selection condition {}", &cond_s)
+                            "GameState.advance(): bad selection condition {}. \
+                        It might be a good idea to validate cards before hand.", &cond_s)
                             .as_str());
                 let (action_meta, mut action_func) = get_action(&act_s)
                     .expect(
-                        format!("GameState.advance(): bad selection action {}", &act_s)
+                        format!("GameState.advance(): bad selection action {}. \
+                        It might be a good idea to validate cards before hand.", &act_s)
                             .as_str());
                 // evaluate the condition
                 if cond(self, &card_id) {
@@ -483,7 +576,27 @@ impl GameState {
                 Ok("Turn was ended".to_string())
             }
             AbstractPlayerAction::TrashCard => {
-                todo!("trash card abstract action")
+                let card_id = client.get_config(self, &Config {
+                    describe: Box::new(|_| "The card to be scrapped".to_string()),
+                    config_method: ActionConfigMethod::PickHandCard(
+                        RelativePlayer::Current,
+                        RelativePlayer::Current
+                    )
+                });
+                let (card, card_status) = self.get_current_player_mut()
+                    .get_card_in_hand_mut(&card_id)
+                    .ok_or(format!("Client: supplied bad card id {}", &card_id)).unwrap();
+                if card.effects.iter().any(|(c, _)| is_trash_cond(c)) {
+                    card_status.scrapped = true;
+                    client.on_feedback(
+                        Feedback::Info(
+                            "This card's trash effect can now be used.".to_string()));
+                    Ok("Scrapped a card using the trash action".to_string())
+                } else {
+                    let s = "This card cannot be scrapped".to_string();
+                    client.on_feedback(Feedback::Invalid(s.clone()));
+                    Ok(s)
+                }
             }
         }
     }
