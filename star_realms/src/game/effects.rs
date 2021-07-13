@@ -41,21 +41,28 @@ pub trait ConfigSupplier {
 // a sibling to ActionConfigMethod
 pub enum ActionConfigMethod {
     /// low: u32, high: u32
-    /// config should be a number in the range (low..high)
+    /// config should be a number in the range [low..high] inclusive
     Range(u32, u32),
-    /// set: contains all the id's that can be used
+
+    /// set: contains all the id's that are possible: one is chosen
     Set(HashSet<u32>), // in this set of numbers
+
     /// num: u32, by: Player, from: Player
     /// num = number of cards to pick
     /// by = player that is picking the cards
     /// from = player that is having cards be picked from
     /// config should be a bitwise-encoded number representing the cards that can be selected
     PickHandCards(u32, RelativePlayer, RelativePlayer),
+
     /// config should be the id of the card that can be picked
     /// by: Player, from: player
     /// by = player that is picking the cards
     /// from = player that is having cards be picked from
     PickHandCard(RelativePlayer, RelativePlayer),
+
+    /// num: u32, by: u32
+    /// num = number of trade row cards to pick
+    /// by = player that is picking them
     PickTradeRowCards(u32, RelativePlayer)
 }
 
@@ -147,9 +154,9 @@ pub fn get_condition(name: String) -> Option<ConditionFunc> {
 pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
     // signal to be a good
     if name.starts_with("G") {
-        return if let Some(goods) = parse_goods(name.as_str()) {
+        if let Some(goods) = parse_goods(name.as_str()) {
             let action = get_good_action(goods);
-            Some(
+            return Some(
                 (
                     ActionMeta {
                         description: "gives some amount of trade, authority, and combat".to_string(),
@@ -158,8 +165,6 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                     action
                 )
             )
-        } else {
-            None
         }
     }
     let pattern = regex::Regex::new(r"draw(\s\d)?").unwrap();
@@ -195,6 +200,71 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                         })
                     )
                 )
+            }
+        }
+    }
+    let pattern = regex::Regex::new(r"scrap trade row( \d)?").unwrap();
+    if pattern.is_match(name.as_str()) {
+        if let Some(captures) = pattern.captures(name) {
+            match captures.get(1) {
+                Some(n) => {
+                    let n = n.as_str().parse::<u32>().unwrap();
+                    let n_copy = n.clone();
+                    return Some(
+                        (
+                            ActionMeta {
+                                description: format!(
+                                    "Scrap up to {} cards in the trade row",
+                                    n.clone()
+                                ),
+                                config: Some(Config {
+                                    describe: Box::new(move |_: u32| format!(
+                                        "Choosing {} cards to scrap in the trade row",
+                                        n_copy
+                                    )),
+                                    config_method: ActionConfigMethod::PickTradeRowCards(
+                                        n.clone(),
+                                        RelativePlayer::Current
+                                    )
+                                }),
+                            },
+                            Box::new(|game, cfg| {
+                                let cards = game.unpack_multi_trade_row_card_selection(&cfg);
+                                let cards = game.remove_cards_from_trade_row(cards);
+                                for c in cards {
+                                    game.scrapped.add(c);
+                                }
+                                // todo: AAAA MAGIC NUMBERS
+                                game.fill_trade_row(5);
+                                Succeed
+                            })
+                            )
+                    )
+                },
+                None => {
+                    return Some(
+                        (
+                            ActionMeta {
+                                description: "Scrap a card in the trade row".to_string(),
+                                config: Some(Config {
+                                    describe: Box::new(|_| "Pick a card from the trade row".to_string()),
+                                    config_method: ActionConfigMethod::PickTradeRowCards(1, RelativePlayer::Current)
+                                })
+                            },
+                            Box::new(|game, cfg| {
+                                // same implementation even though it's just one card, idc
+                                let cards = game.unpack_multi_trade_row_card_selection(&cfg);
+                                let cards = game.remove_cards_from_trade_row(cards);
+                                for c in cards {
+                                    game.scrapped.add(c);
+                                }
+                                // todo: AAAA MAGIC NUMBERS
+                                game.fill_trade_row(5);
+                                Succeed
+                            })
+                        )
+                    )
+                }
             }
         }
     }
@@ -336,6 +406,46 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                     }
                 })
             )
+        ),
+        "merc cruiser" => Some(
+            (
+                ActionMeta {
+                    description: "Choose a faction as you play Merc Cruiser.\
+                     Merc Cruiser has that faction.".to_string(),
+                    config: Some(Config {
+                        describe: Box::new(|i| match i {
+                            0 => "Mech faction",
+                            1 => "Fed faction",
+                            2 => "Blob faction",
+                            3 | _ => "Star faction",
+                        }.to_string()),
+                        config_method: ActionConfigMethod::Range(0, 3)
+                    })
+                },
+                Box::new(|game, cfg| {
+                    let faction = match cfg {
+                        0 => Faction::Mech,
+                        1 => Faction::Fed,
+                        2 => Faction::Blob,
+                        3 | _ => Faction::Star
+                    };
+                    let card = Card {
+                        cost: 0,
+                        name: "synergy card".to_string(),
+
+                        base: None,
+                        synergizes_with: {
+                            let mut tmp = HashSet::new();
+                            tmp.insert(faction);
+                            tmp
+                        },
+                        effects: HashSet::new()
+                    };
+                    let id = game.get_current_player_mut().give_card_to_hand(card);
+                    game.get_current_player_mut().plan_scrap(&id).unwrap();
+                    Succeed
+                })
+                )
         ),
         _ => None
     }

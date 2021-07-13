@@ -242,6 +242,14 @@ impl PlayerArea {
                 panic!("PlayerArea::end_turn: {}", err);
             }
         }
+        // if it's not being scrapped or discarded, I suppose we can reset the effects used?
+        for (_, (card, card_status)) in self.hand_id.iter_mut() {
+            if let None = card.base {
+                panic!("PlayerArea::end_turn: how is there a ship that \
+                    hasn't been discarded or scrapped at the end of the turn?");
+            }
+            card_status.reset_base();
+        }
         self.goods.trade = 0;
         self.goods.combat = 0; // todo: aggregate combat then deal it at the end of the turn
         self.turn_data.reset();
@@ -357,6 +365,32 @@ impl GameState {
             }
         }
     }
+
+    pub fn unpack_multi_trade_row_card_selection(&self, bits: &u32) -> HashSet<u32> {
+        let mut ids = HashSet::new();
+        let num_cards = self.trade_row.len();
+        for i in 0..num_cards {
+            if ((1<<i) & bits) > 0 {
+                ids.insert(i as u32);
+            }
+        }
+        ids
+    }
+
+    /// ids: the indices of the cards to be removed
+    pub fn remove_cards_from_trade_row(&mut self, ids: HashSet<u32>) -> HashSet<Card> {
+        let mut ids: Vec<_> = ids.iter().collect();
+        ids.sort();
+        ids.reverse(); // remove them from biggest to smallest to prevent shifting
+        let mut cards = HashSet::new();
+        for i in ids {
+            let id = self.trade_row.remove(*i as usize)
+                .ok_or(format!("{} is not a valid index in the trade row", i)).unwrap();
+            cards.insert((*self.card_library.get_card_by_id(&id).unwrap()).clone());
+        }
+        cards
+    }
+
     fn flip_turn(&mut self) {
         self.current_player = match self.current_player {
             Player::Player1 => Player::Player2,
@@ -551,7 +585,7 @@ impl GameState {
                 });
                 let (card, card_status) = self.get_current_player_mut()
                     .get_card_in_hand_mut(&card_id)
-                    .unwrap_or_else(|| panic!("Client: supplied bad card id {}", &card_id));
+                    .ok_or(format!("Client: supplied bad card id {}", &card_id)).unwrap();
                 if card.effects.iter().any(|(c, _)| is_trash_cond(c)) {
                     card_status.scrapped = true;
                     client.on_feedback(

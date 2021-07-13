@@ -4,6 +4,7 @@ use crate::game::components::{Defense, Coin};
 use crate::game::Goods;
 use crate::parse::parse_goods;
 use crate::game::effects::is_free_cond;
+use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Card {
@@ -21,7 +22,7 @@ pub struct CardStatus {
     pub scrapped: bool
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Base {
     Outpost(Defense),
     Base(Defense)
@@ -56,7 +57,14 @@ impl CardStatus {
     pub fn is_free(cond: &String) -> bool {
         is_free_cond(cond)
     }
+
+    /// protocol for resetting base after a turn is over when it isn't destroyed
+    pub fn reset_base(&mut self) {
+        self.effects_used.clear();
+        // we don't take it "out of play" because it's still revealed
+    }
     pub fn use_effect(&mut self, effect: &(String, String)) {
+        self.reveal();
         self.effects_used.insert(effect.clone());
     }
 }
@@ -83,5 +91,11 @@ impl Card {
             }
         }
         set
+    }
+}
+
+impl Hash for Card {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
     }
 }
