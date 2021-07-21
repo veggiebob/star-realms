@@ -52,8 +52,8 @@ pub mod main {
             match result {
                 Ok(msg) => println!("log: {}", Color::Yellow.paint(msg)),
                 Err(e) => {
-                    println!("Internal unrecoverable error.");
-                    println!("{}", e);
+                    println!("{}", Color::Red.paint("Internal unrecoverable error."));
+                    println!("{}", Color::Red.paint(e));
                     break;
                 }
             }
