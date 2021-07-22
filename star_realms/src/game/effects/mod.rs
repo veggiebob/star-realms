@@ -63,7 +63,13 @@ pub enum ActionConfigMethod {
     /// num: u32, by: u32
     /// num = number of trade row cards to pick
     /// by = player that is picking them
-    PickTradeRowCards(u32, RelativePlayer)
+    PickTradeRowCards(u32, RelativePlayer),
+
+    /// let the client choose on of the action config methods
+    Or(Box<ActionConfigMethod>, Box<ActionConfigMethod>),
+
+    /// must complete both action config methods
+    And(Box<ActionConfigMethod>, Box<ActionConfigMethod>)
 }
 
 /// FnMut(game, hand_id /* of card */) -> bool
