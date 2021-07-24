@@ -3,7 +3,7 @@ use crate::game::{Goods, GameState, RelativePlayer, HandId};
 use crate::game::util::Failure::{Succeed, Fail};
 use crate::game::util::Failure;
 use crate::game::RelativePlayer::Opponent;
-use crate::game::components::card::{Base, Card};
+use crate::game::components::card::{Base, Card, Effects};
 use std::collections::HashSet;
 use crate::parse::parse_goods;
 use std::fmt::{Display, Formatter};
@@ -287,7 +287,7 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                         name: String::from("bazinga"),
                         base: Some(Base::Outpost(4)),
                         synergizes_with: HashSet::new(),
-                        effects: HashSet::new(),
+                        effects: Effects::new(),
                     });
                     Succeed
                 })
@@ -445,7 +445,7 @@ pub fn get_action(name: &String) -> Option<(ActionMeta, ActionFunc)> {
                             tmp.insert(faction);
                             tmp
                         },
-                        effects: HashSet::new()
+                        effects: Effects::new()
                     };
                     let id = game.get_current_player_mut().give_card_to_hand(card);
                     game.get_current_player_mut().plan_scrap(&id).unwrap();

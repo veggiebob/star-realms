@@ -1,10 +1,11 @@
 use crate::game::components::faction::{Faction, all_factions};
-use std::collections::{HashSet};
+use std::collections::{HashSet, HashMap};
 use crate::game::components::{Defense, Coin};
 use crate::game::Goods;
 use crate::parse::parse_goods;
 use crate::game::effects::is_free_cond;
 use std::hash::{Hash, Hasher};
+use std::collections::hash_set::Iter;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Card {
@@ -12,7 +13,7 @@ pub struct Card {
     pub name: String,
     pub base: Option<Base>, // None -> not a base, otherwise which base is it?
     pub synergizes_with: HashSet<Faction>,
-    pub effects: HashSet<(String, String)> // relational structure
+    pub effects: Effects // relational structure
 }
 
 #[derive(Debug)]
@@ -97,5 +98,54 @@ impl Card {
 impl Hash for Card {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
+    }
+}
+
+pub type EffectConfig = HashMap<String, String>;
+pub type EffectConfigPair = (EffectConfig, EffectConfig); // cond, actn
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Effects {
+    effects: HashSet<(String, String)>,
+    configs: HashMap<(String, String), EffectConfigPair>
+}
+
+impl Effects {
+    pub fn new() -> Effects {
+        Effects {
+            effects: HashSet::new(),
+            configs: HashMap::new()
+        }
+    }
+    pub fn from_no_config_effects(effects: HashSet<(String, String)>) -> Effects {
+        Effects {
+            effects,
+            configs: HashMap::new()
+        }
+    }
+    pub fn get(&self) -> &HashSet<(String, String)> {
+        return &self.effects;
+    }
+    pub fn add(&mut self, kv: (String, String)) {
+        self.effects.insert(kv);
+    }
+    pub fn add_effects(&mut self, kvs: Iter<(String, String)>) {
+        for kv in kvs {
+            self.add(kv.clone());
+        }
+    }
+    pub fn add_config(&mut self, key: (String, String), properties: EffectConfigPair) {
+        self.configs.insert(key, properties);
+    }
+    pub fn add_configs(&mut self, configs: HashMap<(String, String), EffectConfigPair>) {
+        for (k, v) in configs {
+            self.add_config(k, v);
+        }
+    }
+    pub fn get_config(&self, key: &(String, String)) -> Option<&EffectConfigPair> {
+        self.configs.get(key)
+    }
+    pub fn iter(&self) -> Iter<(String, String)> {
+        self.effects.iter()
     }
 }

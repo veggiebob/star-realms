@@ -1,15 +1,16 @@
 extern crate yaml_rust;
 extern crate regex;
-use std::collections::{HashSet};
+use std::collections::{HashSet, HashMap};
 use std::fs;
 
-use crate::game::components::card::{Base, Card};
+use crate::game::components::card::{Base, Card, Effects, EffectConfig, EffectConfigPair};
 use crate::game::components::faction::Faction;
 
 use self::yaml_rust::{Yaml, YamlLoader};
 use self::regex::Regex;
 use crate::game::Goods;
 use crate::game::components::Coin;
+use self::yaml_rust::yaml::Hash;
 
 pub fn parse_file (filepath: String) -> Result<Vec<Card>, String> {
     let contents = fs::read_to_string(filepath);
@@ -47,6 +48,46 @@ pub fn parse_file (filepath: String) -> Result<Vec<Card>, String> {
     }
 }
 
+/*
+Example card:
+
+card_name:
+    base: true|false
+    [defense: <u8>]
+    [outpost: true|false]
+    cost: <u8>
+    [synergy:
+        - m|f|t|s|b
+        - m|f|t|s|b
+        ...
+        ]
+    [effects:
+        - <cond1>: <actn1>
+        - <cond2>: <actn2>
+        ...
+        ]
+    [effects_config:
+        - actn:
+            base: <actn>
+            <k1>: <v1>
+            <k2>: <v2>
+            ...
+          cond:
+            base: <cond>
+            <k1>: <v1>
+            <k2>: <v2>
+            ...
+        - actn:
+            base: <actn>
+            <k1>: <v1>
+            ...
+          cond:
+            base: <cond>
+            <k1>: <v1>
+            ...
+    ]
+
+ */
 pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, String> {
     let obj = yaml;
     let base = match obj["base"].as_bool() {
@@ -122,13 +163,87 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, String> {
         }
     }
 
+    let mut effect_config = HashMap::new();
+    if let Some(cfgs) = obj["effects_config"].as_vec() {
+        for cfg in cfgs {
+            let (k, v) = parse_effect_config(name, cfg)?;
+            effect_config.insert(k, v);
+        }
+    }
+
     Ok(Card {
         cost,
         name: name.to_owned(),
         base,
         synergizes_with,
-        effects,
+        effects: {
+            let mut tmp = Effects::from_no_config_effects(effects);
+            tmp.add_configs(effect_config);
+            tmp
+        }
     })
+}
+
+type KeyedEffectConfig = ((String, String), EffectConfigPair);
+fn parse_effect_config(card_name: &str, config: &Yaml) -> Result<KeyedEffectConfig, String> {
+    let cond_key = Yaml::String("cond".to_string());
+    let actn_key = Yaml::String("actn".to_string());
+    if let Yaml::Hash(kvs) = config {
+        if kvs.contains_key(&cond_key) {
+            if kvs.contains_key(&actn_key) {
+                if let Yaml::Hash(cond_cfg) = kvs.get(&cond_key).unwrap() {
+                    if let Yaml::Hash(actn_cfg) = kvs.get(&actn_key).unwrap() {
+                        todo!("something to do with parse_action_config and parse_cond_config")
+                    } else {
+                        Err(format!(
+                            "'{}' needs an object for the 'actn' key",
+                            &card_name
+                        ))
+                    }
+                } else {
+                    Err(format!(
+                        "'{}' needs an object for the 'cond' key",
+                        &card_name
+                    ))
+                }
+            } else {
+                Err(format!(
+                    "'{}' has a misformatted effect config entry. It doesn't contain the 'actn' key",
+                    &card_name
+                ))
+            }
+        } else {
+            Err(format!(
+                "'{}' has a misformatted effect config entry. It doesn't contain the 'cond' key",
+                &card_name))
+        }
+    } else {
+        Err(
+            format!(
+                "'{}' has a misformatted effect config entry. Is it an anonymous object?",
+                &card_name))
+    }
+}
+
+fn parse_action_config(card_name: &str, hash: Hash) -> Result<(String, EffectConfig), String> {
+    /*
+    actn:
+        base: <actn>
+        <k1>: <v1>
+        <k2>: <v2>
+        ...
+     */
+    todo!()
+}
+fn parse_cond_config(card_name: &str, hash: Hash) -> Result<(String, EffectConfig), String> {
+    /*
+    cond:
+        base: <cond>
+        <k1>: <v1>
+        <k2>: <v2>
+        ...
+     */
+    todo!()
 }
 
 /// example: G0.0.1

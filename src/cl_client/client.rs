@@ -272,6 +272,8 @@ impl ConfigSupplier for Client {
                          input, out);
                 out
             },
+            _ => todo!(
+                "<Client as ConfigSupplier>::get_config: missing behavior for ActionConfigMethod")
         };
         // my IDE can't handle this apparently lmao
         println!("{}\nAre you sure? (y/n)", (config.describe)(v).as_str());
