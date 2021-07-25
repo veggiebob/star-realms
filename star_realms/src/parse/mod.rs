@@ -193,7 +193,9 @@ fn parse_effect_config(card_name: &str, config: &Yaml) -> Result<KeyedEffectConf
             if kvs.contains_key(&actn_key) {
                 if let Yaml::Hash(cond_cfg) = kvs.get(&cond_key).unwrap() {
                     if let Yaml::Hash(actn_cfg) = kvs.get(&actn_key).unwrap() {
-                        todo!("something to do with parse_action_config and parse_cond_config")
+                        let (c_n, c_m) = parse_cond_config(card_name, cond_cfg)?;
+                        let (a_n, a_m) = parse_action_config(card_name, actn_cfg)?;
+                        Ok(((c_n, a_n), (c_m, a_m)))
                     } else {
                         Err(format!(
                             "'{}' needs an object for the 'actn' key",
@@ -225,7 +227,7 @@ fn parse_effect_config(card_name: &str, config: &Yaml) -> Result<KeyedEffectConf
     }
 }
 
-fn parse_action_config(card_name: &str, hash: Hash) -> Result<(String, EffectConfig), String> {
+fn parse_action_config(card_name: &str, hash: &Hash) -> Result<(String, EffectConfig), String> {
     /*
     actn:
         base: <actn>
@@ -233,9 +235,23 @@ fn parse_action_config(card_name: &str, hash: Hash) -> Result<(String, EffectCon
         <k2>: <v2>
         ...
      */
-    todo!()
+    if let Some(actn) = hash.get(&Yaml::String("base".to_string())) {
+        let key = actn.as_str().unwrap().to_string();
+        let mut map = HashMap::new();
+        for (k,v) in hash.iter() {
+            let k = k.as_str().unwrap();
+            if k == "base" {
+                continue;
+            }
+            let v = v.into_string().unwrap();
+            map.insert(k.to_string(), v);
+        }
+        Ok((key, map))
+    } else {
+        Err(format!("'{}' requires a 'base' field in one of the 'cond' effect configs", card_name))
+    }
 }
-fn parse_cond_config(card_name: &str, hash: Hash) -> Result<(String, EffectConfig), String> {
+fn parse_cond_config(card_name: &str, hash: &Hash) -> Result<(String, EffectConfig), String> {
     /*
     cond:
         base: <cond>
@@ -243,7 +259,21 @@ fn parse_cond_config(card_name: &str, hash: Hash) -> Result<(String, EffectConfi
         <k2>: <v2>
         ...
      */
-    todo!()
+    if let Some(cond) = hash.get(&Yaml::String("base".to_string())) {
+        let key = cond.as_str().unwrap().to_string();
+        let mut map = HashMap::new();
+        for (k,v) in hash.iter() {
+            let k = k.as_str().unwrap();
+            if k == "base" {
+                continue;
+            }
+            let v = v.into_string().unwrap();
+            map.insert(k.to_string(), v);
+        }
+        Ok((key, map))
+    } else {
+        Err(format!("'{}' requires a 'base' field in one of the 'cond' effect configs", card_name))
+    }
 }
 
 /// example: G0.0.1
