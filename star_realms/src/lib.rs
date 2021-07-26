@@ -9,7 +9,7 @@ mod tests {
     use yaml_rust::yaml::Yaml::Hash;
     use yaml_rust::YamlLoader;
 
-    use crate::game::components::card::Base;
+    use crate::game::components::card::{Base, Effects};
     use crate::game::components::card::Card;
     use crate::game::components::faction::Faction;
     use crate::game::components::stack::Stack;
@@ -78,7 +78,7 @@ card1:
                 set.insert(Faction::Blob);
                 set
             },
-            effects: HashSet::new(),
+            effects: Effects::new(),
         })
     }
 
@@ -111,8 +111,8 @@ card2:
                 set
             },
             effects: {
-                let mut set = HashSet::new();
-                set.insert(("any".to_owned(), "test".to_owned()));
+                let mut set = Effects::new();
+                set.add(("any".to_owned(), "test".to_owned()));
                 set
             },
         });
@@ -127,7 +127,7 @@ card2:
             cost: 1,
             name: "card1".to_owned(),
             base: None,
-            effects: HashSet::new(),
+            effects: Effects::new(),
             synergizes_with: {
                 let mut set = HashSet::new();
                 set.insert(Faction::Mech);
@@ -146,7 +146,7 @@ card2:
                 set
             },
             effects: {
-                let set = HashSet::new();
+                let set = Effects::new();
                 set
             },
         });
@@ -197,14 +197,14 @@ card2:
             name: "Scout Mock".to_string(),
             base: None,
             synergizes_with: Default::default(),
-            effects: Default::default()
+            effects: Effects::new()
         },
         Card {
             cost: 1,
             name: "Viper Mock".to_string(),
             base: None,
             synergizes_with: Default::default(),
-            effects: Default::default()
+            effects: Effects::new()
         }, false);
         player.draw_hand(5);
         let cfg = 0b111 as u32; // pick the first three

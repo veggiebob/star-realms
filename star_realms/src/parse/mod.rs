@@ -243,7 +243,7 @@ fn parse_action_config(card_name: &str, hash: &Hash) -> Result<(String, EffectCo
             if k == "base" {
                 continue;
             }
-            let v = v.into_string().unwrap();
+            let v = v.clone().into_string().unwrap();
             map.insert(k.to_string(), v);
         }
         Ok((key, map))
@@ -267,7 +267,7 @@ fn parse_cond_config(card_name: &str, hash: &Hash) -> Result<(String, EffectConf
             if k == "base" {
                 continue;
             }
-            let v = v.into_string().unwrap();
+            let v = v.clone().into_string().unwrap();
             map.insert(k.to_string(), v);
         }
         Ok((key, map))

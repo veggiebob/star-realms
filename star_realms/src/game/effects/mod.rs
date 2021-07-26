@@ -101,17 +101,17 @@ pub fn validate_effect((cond, act): (&String, &String)) -> Option<String> {
 
 /// None -> valid
 /// String -> invalid, with reason
-pub fn validate_card_effects(card: &Card) -> Option<String> {
+pub fn validate_card_effects(card: &Card) -> Failure<String> {
     for (l, r) in card.effects.iter() {
         if let Some(e) = validate_effect((l, r)) {
-            return Some(e)
+            return Fail(e)
         }
     }
-    None
+    Succeed
 }
 
 pub fn assert_validate_card_effects(card: &Card) {
-    if let Some(e) = validate_card_effects(&card) {
+    if let Fail(e) = validate_card_effects(&card) {
         panic!("{} was not a valid card because '{}': {:?}", card.name, e, card);
     }
 }
