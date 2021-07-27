@@ -5,14 +5,15 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use components::stack::Stack;
+use effects::conditions::get_condition;
 
 use crate::game::card_library::CardLibrary;
 use crate::game::components::{Authority, Coin, Combat};
 use crate::game::components::card::{Card, CardStatus};
+use crate::game::effects::{Config, ConfigSupplier, get_action, is_trash_cond};
 use crate::game::util::Failure;
-
-use crate::game::effects::{ConfigSupplier, get_condition, get_action, Config, ActionConfigMethod, is_trash_cond};
-use crate::game::util::Failure::{Succeed, Fail};
+use crate::game::util::Failure::{Fail, Succeed};
+use effects::actions::ActionConfigMethod;
 
 pub mod components;
 pub mod card_library;
