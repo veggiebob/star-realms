@@ -171,24 +171,24 @@ card2:
         }
     }
 
-    #[test]
-    fn test_parse_goods () {
-        assert_eq!(parse_goods("G6:3:0").unwrap(), Goods {
-            combat: 6,
-            authority: 3,
-            trade: 0
-        });
-        assert_eq!(parse_goods("G12:0:4").unwrap(), Goods {
-            combat: 12,
-            authority: 0,
-            trade: 4
-        });
-        assert_eq!(parse_goods("G144:225:124").unwrap(), Goods {
-            combat: 144,
-            authority: 225,
-            trade: 124
-        });
-    }
+    // #[test]
+    // fn test_parse_goods () {
+    //     assert_eq!(parse_goods("G6:3:0").unwrap(), Goods {
+    //         combat: 6,
+    //         authority: 3,
+    //         trade: 0
+    //     });
+    //     assert_eq!(parse_goods("G12:0:4").unwrap(), Goods {
+    //         combat: 12,
+    //         authority: 0,
+    //         trade: 4
+    //     });
+    //     assert_eq!(parse_goods("G144:225:124").unwrap(), Goods {
+    //         combat: 144,
+    //         authority: 225,
+    //         trade: 124
+    //     });
+    // }
 
     #[test]
     fn test_multi_card_encoding () {

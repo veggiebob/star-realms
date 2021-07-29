@@ -5,7 +5,7 @@ use std::str::FromStr;
 use ansi_term::Color;
 use star_realms::game::{AbstractPlayerAction, Feedback, GameState, RelativePlayer, UserActionIntent, UserActionSupplier};
 use star_realms::game::components::card::CardStatus;
-use star_realms::game::effects::{Config, ConfigSupplier};
+use star_realms::game::effects::{UserConfigMeta, ConfigSupplier};
 use star_realms::game::effects::conditions::get_condition;
 use star_realms::game::effects::actions::ActionConfigMethod;
 
@@ -232,7 +232,7 @@ pub fn ensure<T, G, P, F, U, E, H>(
 }
 
 impl ConfigSupplier for Client {
-    fn get_config(&self, game: &GameState, config: &Config) -> u32 {
+    fn get_config(&self, game: &GameState, config: &UserConfigMeta) -> u32 {
         let v = match &config.config_method {
             ActionConfigMethod::Range(a, b) => {
                 println!("enter a number between {} and {}", a, b);

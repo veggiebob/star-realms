@@ -2,7 +2,6 @@ use crate::game::components::faction::{Faction, all_factions};
 use std::collections::{HashSet, HashMap};
 use crate::game::components::{Defense, Coin};
 use crate::game::Goods;
-use crate::parse::parse_goods;
 use crate::game::effects::is_free_cond;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_set::Iter;

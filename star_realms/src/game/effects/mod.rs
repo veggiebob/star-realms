@@ -9,11 +9,11 @@ use ansi_term::Color;
 use crate::game::{GameState, Goods, HandId, RelativePlayer};
 use crate::game::components::card::{Base, Card, Effects};
 use crate::game::components::faction::Faction;
-use crate::game::effects::actions::get_action;
 use crate::game::RelativePlayer::Opponent;
 use crate::game::util::Failure::{Fail, Succeed};
 use crate::game::util::Failure;
-use crate::parse::parse_goods;
+use crate::parse::{try_parse_or};
+use crate::game::effects::actions::get_action;
 
 pub mod actions;
 pub mod conditions;
@@ -23,14 +23,17 @@ pub mod conditions;
 /// A trait that the client implements for choosing configuration values for
 pub trait ConfigSupplier {
     /// get a config value (u32) for an action based on this Config object
-    fn get_config(&self, game: &GameState, config: &Config) -> u32;
+    fn get_config(&self, game: &GameState, config: &UserConfigMeta) -> u32;
 }
 
 /// I mean this is just what I use for error reporting in general
 pub type ConfigError = String;
 
 /// describes data contained in yaml configuration for action or condition
-pub type PreConfig = HashMap<String, String>;
+pub struct PreConfig {
+    map: HashMap<String, String>,
+    validated: bool
+}
 
 /// Describes how the action can be configured by the yaml
 pub struct PreConfigMeta {
@@ -45,7 +48,7 @@ pub enum PreConfigType {
 }
 
 /// Describes how the action is configured by the user
-pub struct Config {
+pub struct UserConfigMeta {
     /// dev-friendly description for each of the config values
     pub describe: Box<dyn Fn(u32) -> String>,
     /// enum that shows how to get the config value (u32)
@@ -106,6 +109,64 @@ pub fn is_free_cond(cond: &String) -> bool {
     match cond.as_str() {
         "any" | "free" => true,
         _ => false
+    }
+}
+
+impl PreConfig {
+    pub fn create(map: HashMap<String, String>) -> PreConfig {
+        PreConfig {
+            map,
+            validated: false
+        }
+    }
+    pub fn validate (&self, meta: &PreConfigMeta) -> Failure<String> {
+        for k in meta.required_keys.iter() {
+            if !self.map.contains_key(k) {
+                return Fail(format!("Requires the key '{}'", k));
+            }
+        }
+        for (k, s) in self.map.iter() {
+            if let Some(t) = meta.types.get(k) {
+                return match t {
+                    PreConfigType::Nat => try_parse_or::<u32>(
+                        s,
+                        format!(">>{}: {}<< must be of the Nat type", k, s)
+                    ),
+                    PreConfigType::String => try_parse_or::<u32>(
+                        s,
+                        format!(">>{}: {}<< must be of the String type", k, s)
+                    )
+                }
+            }
+        }
+        Succeed
+    }
+    pub fn get_nat(&self, key: &str) -> u32 {
+        self.map.get(key).unwrap().parse().unwrap()
+    }
+    pub fn get_str(&self, key: &str) -> &str {
+        self.map.get(key).unwrap()
+    }
+}
+
+impl PreConfigMeta {
+    fn all_required(kvs: Vec<(&str, PreConfigType)>) -> PreConfigMeta {
+        PreConfigMeta {
+            required_keys: {
+                let mut tmp = HashSet::new();
+                for (key, _) in kvs.iter() {
+                    tmp.insert(key.to_string());
+                }
+                tmp
+            },
+            types: {
+                let mut tmp = HashMap::new();
+                for (k,v) in kvs {
+                    tmp.insert(k.to_string(), v);
+                }
+                tmp
+            }
+        }
     }
 }
 

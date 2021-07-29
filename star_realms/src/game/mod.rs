@@ -10,7 +10,7 @@ use effects::conditions::get_condition;
 use crate::game::card_library::CardLibrary;
 use crate::game::components::{Authority, Coin, Combat};
 use crate::game::components::card::{Card, CardStatus};
-use crate::game::effects::{Config, ConfigSupplier, get_action, is_trash_cond};
+use crate::game::effects::{UserConfigMeta, ConfigSupplier, get_action, is_trash_cond};
 use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
 use effects::actions::ActionConfigMethod;
@@ -18,7 +18,7 @@ use effects::actions::ActionConfigMethod;
 pub mod components;
 pub mod card_library;
 pub mod effects;
-mod util;
+pub mod util;
 
 type CardStack = Stack<Card>;
 pub type HandId = u32;
@@ -577,7 +577,7 @@ impl GameState {
                 Ok("Turn was ended".to_string())
             }
             AbstractPlayerAction::TrashCard => {
-                let card_id = client.get_config(self, &Config {
+                let card_id = client.get_config(self, &UserConfigMeta {
                     describe: Box::new(|_| "The card to be scrapped".to_string()),
                     config_method: ActionConfigMethod::PickHandCard(
                         RelativePlayer::Current,

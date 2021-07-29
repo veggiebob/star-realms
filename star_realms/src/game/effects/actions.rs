@@ -1,45 +1,40 @@
-use alloc::boxed::Box;
-use alloc::rc::Rc;
-use alloc::string::String;
 use core::option::Option;
 use core::option::Option::{None, Some};
 use core::result::Result::Ok;
-use std::collections::HashSet;
-
-use star_realms::game::{effects, GameState, HandId, RelativePlayer};
-use star_realms::game::components::card::{Base, Card, Effects};
-use star_realms::game::components::faction::Faction;
-use star_realms::game::effects::{Action, ActionConfigMethod, ActionMeta, Config};
-use star_realms::game::RelativePlayer::Opponent;
-use star_realms::game::util::Failure::{Fail, Succeed};
-use star_realms::game::util::Failure;
-use star_realms::parse::parse_goods;
+use std::collections::{HashSet, HashMap};
 
 use crate::game::{effects, GameState, Goods, HandId, RelativePlayer};
 use crate::game::components::card::{Base, Card, Effects};
 use crate::game::components::faction::Faction;
-use crate::game::effects::{Action, ActionConfigMethod, ActionFunc, ActionMeta, Config, ConfigError, PreConfigMeta, PreConfig};
 use crate::game::RelativePlayer::Opponent;
 use crate::game::util::Failure::{Fail, Succeed};
-use crate::parse::parse_goods;
 use crate::game::util::Failure;
+use crate::parse::parse_goods;
+use crate::game::components::{Authority, Coin, Combat};
+use crate::game::effects::{PreConfig, PreConfigMeta, PreConfigType, UserConfigMeta};
 
-pub fn get_action(name: &String) -> Option<Action> {
+pub struct ActionCreator {
+    pub meta: ActionConfig,
+    pub action: Box<dyn FnMut(PreConfig) -> Action>
+}
+
+pub fn get_action(name: &String) -> Option<ActionCreator> {
     // signal to be a good
-    if name.starts_with("G") {
-        if let Some(goods) = parse_goods(name.as_str()) {
-            let action = get_good_action(goods);
-            return Some(
-                (
-                    ActionMeta {
-                        description: "gives some amount of trade, authority, and combat".to_string(),
-                        config: None
-                    },
-                    action
-                )
-            )
-        }
-    }
+    // if name.starts_with("G") {
+    //     if let Some(goods) = parse_goods(name.as_str()) {
+    //         let action = get_good_action(goods);
+    //         return Some(
+    //             (
+    //                 ActionExecution {
+    //                     description: "gives some amount of trade, authority, and combat".to_string(),
+    //                     config: None
+    //                 },
+    //                 action
+    //             )
+    //         )
+    //     }
+    // }
+
     let pattern = regex::Regex::new(r"draw(\s\d)?").unwrap();
     if pattern.is_match(name.as_str()) {
         if let Some(captures) = pattern.captures(name) {
@@ -47,7 +42,7 @@ pub fn get_action(name: &String) -> Option<Action> {
                 if let Ok(n) = n.as_str().parse::<u32>() {
                     return Some(
                         (
-                            ActionMeta {
+                            ActionExecution {
                                 description: format!("Draw {} cards from your deck", &n),
                                 config: None
                             },
@@ -63,7 +58,7 @@ pub fn get_action(name: &String) -> Option<Action> {
             } else {
                 return Some(
                     (
-                        ActionMeta {
+                        ActionExecution {
                             description: "Draw a card from your deck".to_string(),
                             config: None
                         },
@@ -85,12 +80,12 @@ pub fn get_action(name: &String) -> Option<Action> {
                     let n_copy = n.clone();
                     return Some(
                         (
-                            ActionMeta {
+                            ActionExecution {
                                 description: format!(
                                     "Scrap up to {} cards in the trade row",
                                     n.clone()
                                 ),
-                                config: Some(Config {
+                                config: Some(UserConfigMeta {
                                     describe: Box::new(move |_: u32| format!(
                                         "Choosing {} cards to scrap in the trade row",
                                         n_copy
@@ -117,9 +112,9 @@ pub fn get_action(name: &String) -> Option<Action> {
                 None => {
                     return Some(
                         (
-                            ActionMeta {
+                            ActionExecution {
                                 description: "Scrap a card in the trade row".to_string(),
-                                config: Some(Config {
+                                config: Some(UserConfigMeta {
                                     describe: Box::new(|_| "Pick a card from the trade row".to_string()),
                                     config_method: ActionConfigMethod::PickTradeRowCards(1, RelativePlayer::Current)
                                 })
@@ -142,9 +137,42 @@ pub fn get_action(name: &String) -> Option<Action> {
         }
     }
     match name.as_str() {
+        "goods" => Some(
+            ActionCreator {
+                meta: ActionConfig {
+                    pre_config_meta: Some(
+                        PreConfigMeta::all_required(
+                            vec![
+                                ("combat", PreConfigType::Nat),
+                                ("trade", PreConfigType::Nat),
+                                ("authority", PreConfigType::Nat)
+                            ]
+                        )
+                    )
+                },
+                action: Box::new(|cfg: PreConfig| {
+                    let authority = cfg.get_nat("authority") as Authority;
+                    let trade = cfg.get_nat("trade") as Coin;
+                    let combat = cfg.get_nat("combat") as Combat;
+                    (
+                        ActionExecution {
+                            description: format!(
+                                "Gives {} trade, {} combat, and {} authority",
+                                trade, combat, authority),
+                            config: None
+                        },
+                        get_good_action(Goods {
+                            authority,
+                            trade,
+                            combat
+                        })
+                    )
+                })
+            }
+        ),
         "test" => Some(
             (
-                ActionMeta {
+                ActionExecution {
                     description: "test".to_string(),
                     config: None,
                 },
@@ -162,9 +190,9 @@ pub fn get_action(name: &String) -> Option<Action> {
         ),
         "discard" => Some(
             (
-                ActionMeta {
+                ActionExecution {
                     description: "opponent discards a card".to_string(),
-                    config: Some(Config {
+                    config: Some(UserConfigMeta {
                         describe: Box::new(|_| "hand id of card to be discarded".to_string()),
                         config_method: ActionConfigMethod::PickHandCard(Opponent, Opponent)
                     })
@@ -188,9 +216,9 @@ pub fn get_action(name: &String) -> Option<Action> {
         ),
         "destroy target base" => Some(
             (
-                ActionMeta {
+                ActionExecution {
                     description: "destroy any of the opponents bases".to_string(),
-                    config: Some(Config {
+                    config: Some(UserConfigMeta {
                         describe: Box::new(|_| "hand id of the base to be destroyed".to_string()),
                         config_method: ActionConfigMethod::PickHandCard(RelativePlayer::Current, RelativePlayer::Opponent)
                     }),
@@ -218,9 +246,9 @@ pub fn get_action(name: &String) -> Option<Action> {
         ),
         "stealth needle" => Some(
             (
-                ActionMeta {
+                ActionExecution {
                     description: "Copy any other ship in your hand".to_string(),
-                    config: Some(Config {
+                    config: Some(UserConfigMeta {
                         describe: Box::new(|_| "The card to copy".to_string()),
                         config_method: ActionConfigMethod::PickHandCard(
                             RelativePlayer::Current,
@@ -253,10 +281,10 @@ pub fn get_action(name: &String) -> Option<Action> {
         ),
         "acquire no cost" => Some(
             (
-                ActionMeta {
+                ActionExecution {
                     description: "Acquire any ship without paying \
                         its cost and put it on top of your deck".to_string(),
-                    config: Some(Config {
+                    config: Some(UserConfigMeta {
                         describe: Box::new(|_| "The ship to acquire".to_string()),
                         config_method: ActionConfigMethod::Range(0, 4)
                     })
@@ -282,10 +310,10 @@ pub fn get_action(name: &String) -> Option<Action> {
         ),
         "merc cruiser" => Some(
             (
-                ActionMeta {
+                ActionExecution {
                     description: "Choose a faction as you play Merc Cruiser.\
                      Merc Cruiser has that faction.".to_string(),
-                    config: Some(Config {
+                    config: Some(UserConfigMeta {
                         describe: Box::new(|i| match i {
                             0 => "Mech faction",
                             1 => "Fed faction",
@@ -335,7 +363,7 @@ pub fn get_good_action(goods: Goods) -> ActionFunc {
 
 /// FnMut(game, config_value) -> Failure<String>
 pub type ActionFunc = Box<dyn FnMut(&mut GameState, u32) -> Failure<ConfigError>>;
-pub type Action = (ActionMeta, ActionFunc);
+pub type Action = (ActionExecution, ActionFunc);
 
 //todo: are there any instances where a Range or Set would be used, and need to specify which
 // player picks the config? If so, there should be a "by" player abstracted into Config as
@@ -373,15 +401,26 @@ pub enum ActionConfigMethod {
     Both(Box<ActionConfigMethod>, Box<ActionConfigMethod>)
 }
 
-pub struct ActionMeta {
-    /// description of the action, (probably?) user-friendly
-    pub description: String,
-    pub config: Option<Config>,
-    pub pre_config_meta: Option<PreConfigMeta>,
-    pub pre_config_data: Option<PreConfig>
+/// describes how the action can be created
+pub struct ActionConfig {
+    pub pre_config_meta: Option<PreConfigMeta>
+}
+impl ActionConfig {
+    fn no_config() -> ActionConfig {
+        ActionConfig {
+            pre_config_meta: None
+        }
+    }
 }
 
-impl ActionMeta {
+/// description of properties during execution
+pub struct ActionExecution {
+    /// description of the action, (probably?) user-friendly
+    pub description: String,
+    pub config: Option<UserConfigMeta>,
+}
+
+impl ActionExecution {
     pub fn no_config(&self) -> bool {
         self.config.is_none()
     }

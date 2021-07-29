@@ -11,6 +11,9 @@ use self::regex::Regex;
 use crate::game::Goods;
 use crate::game::components::Coin;
 use self::yaml_rust::yaml::Hash;
+use crate::game::util::Failure;
+use crate::game::util::Failure::{Fail, Succeed};
+use std::str::FromStr;
 
 pub fn parse_file (filepath: String) -> Result<Vec<Card>, String> {
     let contents = fs::read_to_string(filepath);
@@ -277,35 +280,41 @@ fn parse_cond_config(card_name: &str, hash: &Hash) -> Result<(String, EffectConf
 }
 
 /// example: G0.0.1
-pub fn parse_goods(good_str: &str) -> Option<Goods> {
-    // Remember: C.A.T
-
-    // also this has been known to be a bad design pattern but for now I'll keep it in here for simplicity
-    // see https://docs.rs/regex/1.5.4/regex/
-    let pattern = Regex::new(r"G(\d+).(\d+).(\d+)").unwrap();
-
-    let caps = pattern.captures(good_str);
-    match caps {
-        None => None,
-        Some(caps) => {
-            if let Some(c) = caps.get(1) {
-                if let Some(a) = caps.get(2) {
-                    if let Some(t) = caps.get(3) {
-                        Some(Goods {
-                            // unwrapping because we used regex to get strings
-                            combat: c.as_str().parse().unwrap(),
-                            authority: a.as_str().parse().unwrap(),
-                            trade: t.as_str().parse().unwrap()
-                        })
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }
+// pub fn parse_goods(good_str: &str) -> Option<Goods> {
+//     // Remember: C.A.T
+//
+//     // also this has been known to be a bad design pattern but for now I'll keep it in here for simplicity
+//     // see https://docs.rs/regex/1.5.4/regex/
+//     let pattern = Regex::new(r"G(\d+).(\d+).(\d+)").unwrap();
+//
+//     let caps = pattern.captures(good_str);
+//     match caps {
+//         None => None,
+//         Some(caps) => {
+//             if let Some(c) = caps.get(1) {
+//                 if let Some(a) = caps.get(2) {
+//                     if let Some(t) = caps.get(3) {
+//                         Some(Goods {
+//                             // unwrapping because we used regex to get strings
+//                             combat: c.as_str().parse().unwrap(),
+//                             authority: a.as_str().parse().unwrap(),
+//                             trade: t.as_str().parse().unwrap()
+//                         })
+//                     } else {
+//                         None
+//                     }
+//                 } else {
+//                     None
+//                 }
+//             } else {
+//                 None
+//             }
+//         }
+//     }
+// }
+pub fn try_parse_or<T: FromStr>(s: &String, err: String) -> Failure<String> {
+    if let None = s.parse::<T>() {
+        Fail(err)
     }
+    Succeed
 }
