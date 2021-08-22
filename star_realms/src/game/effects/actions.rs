@@ -15,86 +15,96 @@ use std::rc::Rc;
 
 pub struct ActionCreator {
     pub meta: ActionConfig,
-    pub generator: Box<dyn FnMut(PreConfig) -> Action>
+    pub generator: ActionGenerator
+}
+
+type ActionGenerator = Box<dyn FnMut(PreConfig) -> Action>;
+
+/// describes how the action can be created
+pub struct ActionConfig {
+    pub pre_config_meta: Option<PreConfigMeta>
+}
+
+pub struct Action {
+    pub meta: ActionExecution,
+    pub action: ActionFunc
+}
+
+pub type ActionFunc = Box<dyn FnMut(&mut GameState, ActionExecutionConfig) -> Failure<String>>;
+pub type ActionExecutionConfig = u32;
+
+/// description of properties during execution
+pub struct ActionExecution {
+    /// description of the action, (probably?) user-friendly
+    pub description: String,
+    pub config: Option<UserConfigMeta>,
 }
 
 pub fn get_action(name: &String) -> Option<ActionCreator> {
-    let pattern = regex::Regex::new(r"scrap trade row( \d)?").unwrap();
-    if pattern.is_match(name.as_str()) {
-        if let Some(captures) = pattern.captures(name) {
-            match captures.get(1) {
-                Some(n) => {
-                    let n = n.as_str().parse::<u32>().unwrap();
-                    let n_copy = n.clone();
-                    return Some(
-                        (
-                            ActionExecution {
-                                description: format!(
-                                    "Scrap up to {} cards in the trade row",
-                                    n.clone()
-                                ),
-                                config: Some(UserConfigMeta {
-                                    describe: Box::new(move |_: u32| format!(
-                                        "Choosing {} cards to scrap in the trade row",
-                                        n_copy
-                                    )),
-                                    config_method: ActionConfigMethod::PickTradeRowCards(
-                                        n.clone(),
-                                        RelativePlayer::Current
-                                    )
-                                }),
-                            },
-                            Box::new(|game, cfg| {
-                                let cards = game.unpack_multi_trade_row_card_selection(&cfg);
-                                let cards = game.remove_cards_from_trade_row(cards);
-                                for c in cards {
-                                    game.scrapped.add(c);
-                                }
-                                // todo: AAAA MAGIC NUMBERS
-                                game.fill_trade_row(5);
-                                Succeed
-                            })
-                            )
-                    )
-                },
-                None => {
-                    return Some(
-                        (
-                            ActionExecution {
-                                description: "Scrap a card in the trade row".to_string(),
-                                config: Some(UserConfigMeta {
-                                    describe: Box::new(|_| "Pick a card from the trade row".to_string()),
-                                    config_method: ActionConfigMethod::PickTradeRowCards(1, RelativePlayer::Current)
-                                })
-                            },
-                            Box::new(|game, cfg| {
-                                // same implementation even though it's just one card, idc
-                                let cards = game.unpack_multi_trade_row_card_selection(&cfg);
-                                let cards = game.remove_cards_from_trade_row(cards);
-                                for c in cards {
-                                    game.scrapped.add(c);
-                                }
-                                // todo: AAAA MAGIC NUMBERS
-                                game.fill_trade_row(5);
-                                Succeed
-                            })
-                        )
-                    )
-                }
-            }
-        }
-    }
     match name.as_str() {
         "scrap trade row card" => Some(ActionCreator {
             meta: ActionConfig { pre_config_meta: None },
             generator: Box::new(|cfg| {
                 Action {
-                    meta: ,
-                    action:
+                    meta: ActionExecution {
+                        description: "Scrap a card in the trade row".to_string(),
+                        config: Some(UserConfigMeta {
+                            describe: Box::new(|_| "Pick a card from the trade row".to_string()),
+                            config_method: ActionConfigMethod::PickTradeRowCards(1, RelativePlayer::Current)
+                        })
+                    },
+                    action: Box::new(|game, cfg| {
+                        // same implementation even though it's just one card, idc
+                        let cards = game.unpack_multi_trade_row_card_selection(&cfg);
+                        let cards = game.remove_cards_from_trade_row(cards);
+                        for c in cards {
+                            game.scrapped.add(c);
+                        }
+                        // todo: AAAA MAGIC NUMBERS
+                        game.fill_trade_row(5);
+                        Succeed
+                    })
                 }
             })
         }),
-        "scrap trade row card" => Some(...),
+        "scrap trade row cards" => Some(ActionCreator {
+            meta: ActionConfig {
+                pre_config_meta: Some(PreConfigMeta::all_required(vec![
+                    ("cards", PreConfigType::Nat)
+                ]))
+            },
+            generator: Box::new(|cfg| {
+                let n = &cfg.get_nat("cards");
+                Action {
+                    meta: ActionExecution {
+                        description: format!(
+                            "Scrap up to {} cards in the trade row",
+                            *n
+                        ),
+                        config: Some(UserConfigMeta {
+                            describe: Box::new(move |_: u32| format!(
+                                "Choosing {} cards to scrap in the trade row",
+                                *n
+                            )),
+                            config_method: ActionConfigMethod::PickTradeRowCards(
+                                *n,
+                                RelativePlayer::Current
+                            )
+                        }),
+                    },
+                    action: Box::new(|game, cfg| {
+                        let cards = game.unpack_multi_trade_row_card_selection(&cfg);
+                        let cards = game.remove_cards_from_trade_row(cards);
+                        for c in cards {
+                            game.scrapped.add(c);
+                        }
+                        // todo: AAAAaaaaa MAGIC NUMBERS
+                        game.fill_trade_row(5);
+                        Succeed
+                    })
+                }
+            })
+        }),
         "goods" => Some(
             ActionCreator {
                 meta: ActionConfig {
@@ -350,13 +360,6 @@ pub fn get_good_action(goods: Goods) -> ActionFunc {
     })
 }
 
-/// FnMut(game, config_value) -> Failure<String>
-pub type ActionFunc = Box<dyn FnMut(&mut GameState, u32) -> Failure<String>>;
-pub struct Action {
-    pub meta: ActionExecution,
-    pub action: ActionFunc
-}
-
 //todo: are there any instances where a Range or Set would be used, and need to specify which
 // player picks the config? If so, there should be a "by" player abstracted into Config as
 // a sibling to ActionConfigMethod
@@ -393,23 +396,12 @@ pub enum ActionConfigMethod {
     Both(Box<ActionConfigMethod>, Box<ActionConfigMethod>)
 }
 
-/// describes how the action can be created
-pub struct ActionConfig {
-    pub pre_config_meta: Option<PreConfigMeta>
-}
 impl ActionConfig {
     fn no_config() -> ActionConfig {
         ActionConfig {
             pre_config_meta: None
         }
     }
-}
-
-/// description of properties during execution
-pub struct ActionExecution {
-    /// description of the action, (probably?) user-friendly
-    pub description: String,
-    pub config: Option<UserConfigMeta>,
 }
 
 impl ActionExecution {

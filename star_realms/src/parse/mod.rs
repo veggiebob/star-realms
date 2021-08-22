@@ -279,6 +279,8 @@ fn parse_cond_config(card_name: &str, hash: &Hash) -> Result<(String, EffectConf
     }
 }
 
+
+
 /// example: G0.0.1
 // pub fn parse_goods(good_str: &str) -> Option<Goods> {
 //     // Remember: C.A.T

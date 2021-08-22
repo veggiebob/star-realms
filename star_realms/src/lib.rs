@@ -15,7 +15,7 @@ mod tests {
     use crate::game::components::stack::Stack;
     use crate::game::effects::assert_validate_card_effects;
     use crate::game::{Goods, GameState, PlayerArea};
-    use crate::parse::{parse_card, parse_file, parse_goods};
+    use crate::parse::{parse_card, parse_file};
     use crate::game::card_library::CardLibrary;
     use std::mem;
 

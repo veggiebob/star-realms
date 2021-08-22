@@ -168,6 +168,9 @@ impl PreConfigMeta {
             }
         }
     }
+    fn optional_keys(&self) -> HashSet<&String> {
+        return self.types.keys().filter(|k| self.required_keys.contains(*k)).collect();
+    }
 }
 
 impl Add for Goods {

@@ -10,10 +10,11 @@ use effects::conditions::get_condition;
 use crate::game::card_library::CardLibrary;
 use crate::game::components::{Authority, Coin, Combat};
 use crate::game::components::card::{Card, CardStatus};
-use crate::game::effects::{UserConfigMeta, ConfigSupplier, get_action, is_trash_cond};
+use crate::game::effects::{UserConfigMeta, ConfigSupplier, is_trash_cond};
 use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
 use effects::actions::ActionConfigMethod;
+use crate::game::effects::actions::{get_action, ActionCreator, Action};
 
 pub mod components;
 pub mod card_library;
@@ -473,13 +474,32 @@ impl GameState {
                             "GameState.advance(): bad selection condition {}. \
                         It might be a good idea to validate cards before hand.", &cond_s)
                             .as_str());
-                let (action_meta, mut action_func) = get_action(&act_s)
+                let ActionCreator {
+                    meta: action_meta,
+                    generator: action_generator
+                } = get_action(&act_s)
                     .expect(
                         format!("GameState.advance(): bad selection action {}. \
-                        It might be a good idea to validate cards before hand.", &act_s)
+                        Have the cards been validated?", &act_s)
                             .as_str());
+                let card = &self.get_current_player_mut()
+                    .get_card_in_hand(&card_id)
+                    .expect("GameState::advance: (when selecting effect) \
+                    'card_id' is not a valid id").0;
+                let pre_config = card.effects
+                    .get_action_pre_config(&cond_s, &actn_s);
+
+                if None = pre_config {
+                    return Result::Err(format!("The PreConfig for the condition-action pair \
+                    ({}, {}) could not be found in the card '{}' with id {}",
+                                               &cond_s, &actn_s, card.name, card_id));
+                }
+
+                let action: Action = action_generator(pre_config.unwrap());
+
                 // evaluate the condition
                 if cond(self, &card_id) {
+                    let result = action(); // todo: what does this need as parameters
                     // if true, run the action
                     // println!("cond succeeded! running action...");
                     match action_func(self,
