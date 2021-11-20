@@ -76,7 +76,6 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, String> {
     };
 
     let mut synergizes_with = HashSet::new();
-    let mut effects = HashSet::new();
 
     // no synergy is ok, some cards don't have it
     // but if synergy is provided and it's not a vec, it's bad
@@ -102,32 +101,11 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, String> {
         }
     }
 
-    if let Some(mp) = obj["effects"].as_vec() {
-        for yaml in mp {
-            if let Yaml::Hash(ks) = yaml {
-                for (k, v) in ks {
-                    if let Some(k) = k.as_str() {
-                        if let Some(v) = v.as_str() {
-                            effects.insert((k.to_string(), v.to_string()));
-                        } else {
-                            return Err("value of effect could not be a string".to_string())
-                        }
-                    } else {
-                        return Err("key of effect could not be a string".to_string());
-                    }
-                }
-            } else {
-                return Err("key could not be a string".to_string())
-            }
-        }
-    }
-
     Ok(Card {
         cost,
         name: name.to_owned(),
         base,
         synergizes_with,
-        effects,
     })
 }
 

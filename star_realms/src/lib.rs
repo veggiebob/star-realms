@@ -13,11 +13,11 @@ mod tests {
     use crate::game::components::card::Card;
     use crate::game::components::faction::Faction;
     use crate::game::components::stack::Stack;
-    use crate::game::effects::assert_validate_card_effects;
     use crate::game::{Goods, GameState, PlayerArea};
     use crate::parse::{parse_card, parse_file, parse_goods};
     use crate::game::card_library::CardLibrary;
     use std::mem;
+    use crate::game::util::Join;
 
     #[test]
     fn test_shuffle() {
@@ -55,123 +55,6 @@ card2:
     }
 
     #[test]
-    fn parse_yaml_card1() {
-        // print_long_message("testing card 1");
-        let yaml = YamlLoader::load_from_str("\
-card1:
-  cost: 1
-  base: false
-  synergy:
-    - m
-    - b
-        ");
-        let yaml = &yaml.unwrap()[0];
-        let card = parse_card("card1", yaml["card1"].clone()).unwrap();
-        // println!("{:?}", card);
-        assert_eq!(card, Card {
-            cost: 1,
-            name: "card1".to_owned(),
-            base: None,
-            synergizes_with: {
-                let mut set = HashSet::new();
-                set.insert(Faction::Mech);
-                set.insert(Faction::Blob);
-                set
-            },
-            effects: HashSet::new(),
-        })
-    }
-
-    #[test]
-    fn parse_yaml_card2() {
-        // print_long_message("testing card 2");
-        let yaml = YamlLoader::load_from_str("\
-card2:
-  cost: 2
-  base: true
-  defense: 4
-  outpost: true
-  synergy:
-    - s
-    - f
-  effects:
-    - any: test
-        ");
-        let yaml = &yaml.unwrap()[0];
-        let card = parse_card("card2", yaml["card2"].clone()).unwrap();
-        // println!("{:?}", card);
-        assert_eq!(card, Card {
-            cost: 2,
-            name: "card2".to_owned(),
-            base: Some(Base::Outpost(4)),
-            synergizes_with: {
-                let mut set = HashSet::new();
-                set.insert(Faction::Star);
-                set.insert(Faction::Fed);
-                set
-            },
-            effects: {
-                let mut set = HashSet::new();
-                set.insert(("any".to_owned(), "test".to_owned()));
-                set
-            },
-        });
-        assert_validate_card_effects(&card);
-    }
-
-    #[test]
-    fn parse_multiple_cards() {
-        let cards = parse_file("config/test.yaml".to_owned()).unwrap();
-        assert_eq!(cards.len(), 2);
-        assert_eq!(cards[0], Card {
-            cost: 1,
-            name: "card1".to_owned(),
-            base: None,
-            effects: HashSet::new(),
-            synergizes_with: {
-                let mut set = HashSet::new();
-                set.insert(Faction::Mech);
-                set.insert(Faction::Fed);
-                set
-            },
-        });
-        assert_eq!(cards[1], Card {
-            cost: 2,
-            name: "card2".to_owned(),
-            base: Some(Base::Base(6)),
-            synergizes_with: {
-                let mut set = HashSet::new();
-                set.insert(Faction::Star);
-                set.insert(Faction::Blob);
-                set
-            },
-            effects: {
-                let set = HashSet::new();
-                set
-            },
-        });
-        for card in cards.iter() {
-            assert_validate_card_effects(card);
-        }
-    }
-
-    #[test]
-    fn validate_misc_cards () {
-        let cards = parse_file("config/misc_cards.yaml".to_owned()).unwrap();
-        for card in cards.iter() {
-            assert_validate_card_effects(card);
-        }
-    }
-
-    #[test]
-    fn validate_trade_cards () {
-        let cards = parse_file("config/trade_cards.yaml".to_owned()).unwrap();
-        for card in cards.iter() {
-            assert_validate_card_effects(card);
-        }
-    }
-
-    #[test]
     fn test_parse_goods () {
         assert_eq!(parse_goods("G6:3:0").unwrap(), Goods {
             combat: 6,
@@ -189,39 +72,7 @@ card2:
             trade: 124
         });
     }
-
-    #[test]
-    fn test_multi_card_encoding () {
-        let mut player = PlayerArea::new(Card {
-            cost: 1,
-            name: "Scout Mock".to_string(),
-            base: None,
-            synergizes_with: Default::default(),
-            effects: Default::default()
-        },
-        Card {
-            cost: 1,
-            name: "Viper Mock".to_string(),
-            base: None,
-            synergizes_with: Default::default(),
-            effects: Default::default()
-        }, false);
-        player.draw_hand(5);
-        let cfg = 0b111 as u32; // pick the first three
-        let first_three = {
-            let ids = player.get_all_hand_card_ids();
-            let mut hand_ids: Vec<_> = ids.iter().collect();
-            hand_ids.sort();
-            let mut set = HashSet::new();
-            for i in 0..3 {
-                set.insert(*hand_ids[i]); // insert the first three
-            }
-            set
-        };
-        let cards = player.unpack_multi_card_id(cfg);
-        assert_eq!(cards, first_three);
-    }
-
+    
     #[test]
     fn test_sizes () {
         println!("Size of String: {}", mem::size_of::<String>());
@@ -231,6 +82,18 @@ card2:
         println!("Size of &Card: {}", mem::size_of::<&Card>());
         println!("Size of PlayerArea: {}", mem::size_of::<PlayerArea>());
         println!("Size of HashSet<(String, String)>: {}", mem::size_of::<HashSet<(String, String)>>());
+    }
+
+    #[test]
+    fn join_playground() {
+        let joined = Join::Unit(5);
+        let v = vec![1, 2, 3, 4, 5];
+        let joined_2 = Join::all(v.iter());
+        println!("{:?}", if let Join::All(xs) = joined_2 {
+            xs
+        } else {
+            vec![]
+        })
     }
 
     fn print_long_message(msg: &str) {
