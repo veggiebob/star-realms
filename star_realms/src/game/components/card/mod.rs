@@ -5,14 +5,17 @@ use details::Base;
 
 use crate::game::components::{Coin, Defense};
 use crate::game::components::faction::{all_factions, Faction};
-use crate::game::Goods;
+use crate::game::components::Goods;
 use crate::game::util::Join;
 use crate::parse::parse_goods;
 use crate::game::components::card::details::PlaySet;
+use std::rc::Rc;
 
 pub mod details;
 
-#[derive(Clone, Debug)]
+pub type CardRef = Rc<Card>;
+
+#[derive(Debug)]
 pub struct Card {
     pub cost: Coin,
     pub name: String,

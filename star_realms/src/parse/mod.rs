@@ -8,7 +8,7 @@ use crate::game::components::card::Card;
 use crate::game::components::card::details::Base;
 use crate::game::components::Coin;
 use crate::game::components::faction::Faction;
-use crate::game::Goods;
+use crate::game::components::Goods;
 
 use self::regex::Regex;
 use self::yaml_rust::{Yaml, YamlLoader};

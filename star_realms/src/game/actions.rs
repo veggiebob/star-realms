@@ -1,4 +1,4 @@
-use crate::game::Goods;
+use crate::game::components::Goods;
 use crate::game::components::card::details::Actionable;
 
 pub fn add_goods(goods: Goods) -> Actionable {

@@ -8,9 +8,9 @@ use components::stack::Stack;
 
 use crate::game::card_library::CardLibrary;
 use crate::game::components::{Authority, Coin, Combat};
-use crate::game::components::card::{Card};
+use crate::game::components::card::{Card, CardRef};
 use crate::game::util::Failure;
-use crate::game::util::Failure::{Succeed, Fail};
+use crate::game::util::Failure::{Fail, Succeed};
 
 pub mod components;
 pub mod card_library;
@@ -19,13 +19,6 @@ pub mod actions;
 
 type CardStack = Stack<Card>;
 pub type HandId = u32;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct Goods {
-    pub(crate) trade: Coin,
-    pub(crate) authority: Authority,
-    pub(crate) combat: Combat,
-}
 
 #[derive(Debug)]
 pub struct TurnData {
@@ -123,7 +116,7 @@ pub struct PlayerArea {
 }
 
 impl PlayerArea {
-    pub fn new(scout: Card, viper: Card) -> PlayerArea {
+    pub fn new(scout: CardRef, viper: CardRef) -> PlayerArea {
         todo!()
     }
 }
@@ -135,8 +128,8 @@ impl GameState {
         let scout = card_library.get_scout().expect("card library needs a scout!");
         let viper = card_library.get_viper().expect("card library needs a viper!");
         let mut gs = GameState {
-            player1: PlayerArea::new((*scout).clone(), (*viper).clone()),
-            player2: PlayerArea::new((*scout).clone(), (*viper).clone()),
+            player1: PlayerArea::new(Rc::clone(&scout), Rc::clone(&viper)),
+            player2: PlayerArea::new(Rc::clone(&scout), Rc::clone(&viper)),
             current_player: Player::Player1,
             trade_row: Stack::empty(),
             explorers: 10,
@@ -180,7 +173,7 @@ impl GameState {
     }
 
     /// ids: the indices of the cards to be removed
-    pub fn remove_cards_from_trade_row(&mut self, ids: HashSet<u32>) -> HashSet<Card> {
+    pub fn remove_cards_from_trade_row(&mut self, ids: HashSet<u32>) -> HashSet<CardRef> {
         let mut ids: Vec<_> = ids.iter().collect();
         ids.sort();
         ids.reverse(); // remove them from biggest to smallest to prevent shifting
@@ -188,7 +181,7 @@ impl GameState {
         for i in ids {
             let id = self.trade_row.remove(*i as usize)
                 .ok_or(format!("{} is not a valid index in the trade row", i)).unwrap();
-            cards.insert((*self.card_library.get_card_by_id(&id).unwrap()).clone());
+            cards.insert(Rc::clone(&self.card_library.get_card_by_id(&id).unwrap()));
         }
         cards
     }

@@ -5,20 +5,21 @@ mod parse;
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::mem;
 
     use yaml_rust::yaml::Yaml::Hash;
     use yaml_rust::YamlLoader;
 
-    use crate::game::components::card::details::{Base, Action, Requirement, Sacrifice};
-    use crate::game::components::card::Card;
-    use crate::game::components::faction::Faction;
-    use crate::game::components::stack::Stack;
-    use crate::game::{Goods, GameState, PlayerArea};
-    use crate::parse::{parse_card, parse_file, parse_goods};
-    use crate::game::card_library::CardLibrary;
-    use std::mem;
-    use crate::game::util::Join;
+    use crate::game::{GameState, PlayerArea};
     use crate::game::actions::{add_goods, draw_card};
+    use crate::game::card_library::CardLibrary;
+    use crate::game::components::card::Card;
+    use crate::game::components::card::details::{Action, Base, Exhaustibility, Play, Requirement, Sacrifice, CardSource};
+    use crate::game::components::faction::Faction;
+    use crate::game::components::Goods;
+    use crate::game::components::stack::Stack;
+    use crate::game::util::Join;
+    use crate::parse::{parse_card, parse_file, parse_goods};
 
     #[test]
     fn test_shuffle() {
@@ -97,25 +98,59 @@ card2:
                 set
             },
             content: Some(vec![
-                (
-                    None,
-                    Action::Unit(
+                Play {
+                    cond: None,
+                    actn: Action::Unit(
                         Join::choose(vec![
                             add_goods(Goods { trade: 1, authority: 0, combat: 0 }),
                             add_goods(Goods { trade: 0, authority: 3, combat: 0 })
                         ])
-                    )
-                ),
-                (
-                    Some(
+                    ),
+                    exhaust: Exhaustibility::Once
+                },
+                Play {
+                    cond: Some(
                         Join::Unit(
                             Requirement::Cost(
-                                Sacrifice { scrap: true, goods: None }
+                                Sacrifice::ScrapThis
                             )
                         )
                     ),
-                    Action::Unit(Join::Unit(draw_card()))
-                )
+                    actn: Action::Unit(Join::Unit(draw_card())),
+                    exhaust: Exhaustibility::Once
+                }
+            ])
+        };
+
+        let card_2 = Card {
+            cost: 7,
+            name: "The Ark".to_string(),
+            base: None,
+            synergizes_with: {
+                let mut set = HashSet::new();
+                set.insert(Faction::Mech);
+                set
+            },
+            content: Some(vec![
+                Play {
+                    cond: None,
+                    actn: Action::Unit(
+                        Join::Unit(add_goods(Goods::combat(5)))),
+                    exhaust: Exhaustibility::Once
+                },
+                Play {
+                    cond: Some(Join::Unit(
+                        Requirement::Cost(Sacrifice::Scrap(
+                            1,
+                            Join::choose(vec![
+                                CardSource::Discard,
+                                CardSource::Hand
+                            ])
+                        ))
+                    )),
+                    actn: Action::Unit(Join::Unit(draw_card())),
+                    exhaust: Exhaustibility::UpTo(2)
+                }
             ])
         };
     }

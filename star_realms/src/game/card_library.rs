@@ -1,4 +1,4 @@
-use crate::game::components::card::Card;
+use crate::game::components::card::{Card, CardRef};
 use std::collections::HashMap;
 use crate::game::components::stack::Stack;
 use std::rc::Rc;
@@ -101,10 +101,6 @@ impl CardLibrary {
         }
     }
 
-    pub fn as_new_card(&self, id: &u32) -> Card {
-        (*self.as_card(id)).clone()
-    }
-
     /// force-get a card
     pub fn as_card(&self, id: &u32) -> Rc<Card> {
         self.get_card_by_id(id).unwrap()
@@ -118,9 +114,9 @@ impl CardLibrary {
         }
     }
 
-    pub fn get_new_card_by_id(&self, id: &u32) -> Option<Card> {
+    pub fn get_new_card_by_id(&self, id: &u32) -> Option<CardRef> {
         match self.get_card_by_id(id) {
-            Some(c) => Some((*c).clone()),
+            Some(c) => Some(Rc::clone(&c)),
             None => None
         }
     }
