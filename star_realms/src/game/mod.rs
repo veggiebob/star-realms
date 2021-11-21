@@ -16,6 +16,7 @@ pub mod components;
 pub mod card_library;
 pub mod util;
 pub mod actions;
+pub mod requirements;
 
 type CardStack = Stack<Card>;
 pub type HandId = u32;

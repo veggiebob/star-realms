@@ -40,15 +40,23 @@ pub enum Requirement {
 
 #[derive(Debug, Clone)]
 pub enum Sacrifice {
+
+    /// required to scrap this card
     ScrapThis,
 
     /// scrap some amount of cards, from discard and/or hand
     Scrap(CardSizeT, Join<CardSource>),
+
+    /// required to spend the goods
     Goods(Goods),
+
+    /// required to discard that many cards
     Discard(CardSizeT)
+
+    // DiscardThis??
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CardSource {
     Hand,
     Discard

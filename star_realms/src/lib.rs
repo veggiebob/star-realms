@@ -11,7 +11,7 @@ mod tests {
     use yaml_rust::YamlLoader;
 
     use crate::game::{GameState, PlayerArea};
-    use crate::game::actions::{add_goods, draw_card};
+    use crate::game::actions::{add_goods, draw_card, scrap_card};
     use crate::game::card_library::CardLibrary;
     use crate::game::components::card::Card;
     use crate::game::components::card::details::{Action, Base, Exhaustibility, Play, Requirement, Sacrifice, CardSource};
@@ -20,6 +20,7 @@ mod tests {
     use crate::game::components::stack::Stack;
     use crate::game::util::Join;
     use crate::parse::{parse_card, parse_file, parse_goods};
+    use crate::game::requirements::synergy;
 
     #[test]
     fn test_shuffle() {
@@ -150,6 +151,34 @@ card2:
                     )),
                     actn: Action::Unit(Join::Unit(draw_card())),
                     exhaust: Exhaustibility::UpTo(2)
+                }
+            ])
+        };
+
+        let card_3 = Card {
+            name: "Trade Bot".to_string(),
+            synergizes_with: {
+                let mut set = HashSet::new();
+                set.insert(Faction::Mech);
+                set
+            },
+            base: None,
+            cost: 1,
+            content: Some(vec![
+                Play {
+                    cond: None,
+                    actn: Action::Unit(Join::all(vec![
+                        add_goods(Goods::trade(1)),
+                        scrap_card(
+                            vec![CardSource::Discard, CardSource::Hand]
+                                .into_iter().collect())
+                    ])),
+                    exhaust: Exhaustibility::Once
+                },
+                Play {
+                    cond: Some(Join::Unit(synergy(Faction::Mech))),
+                    actn: Action::Unit(Join::Unit(add_goods(Goods::combat(2)))),
+                    exhaust: Exhaustibility::Once
                 }
             ])
         };
