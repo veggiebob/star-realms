@@ -1,35 +1,24 @@
-use crate::game::components::faction::{Faction, all_factions};
-use std::collections::{HashSet};
-use crate::game::components::{Defense, Coin};
-use crate::game::Goods;
-use crate::parse::parse_goods;
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+
+use details::Base;
+
+use crate::game::components::{Coin, Defense};
+use crate::game::components::faction::{all_factions, Faction};
+use crate::game::Goods;
 use crate::game::util::Join;
+use crate::parse::parse_goods;
+use crate::game::components::card::details::PlaySet;
 
 pub mod details;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Card {
     pub cost: Coin,
     pub name: String,
     pub base: Option<Base>, // None -> not a base, otherwise which base is it?
     pub synergizes_with: HashSet<Faction>,
-    pub content: Join<PlaySet>
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum Base {
-    Outpost(Defense),
-    Base(Defense)
-}
-
-impl Base {
-    pub fn is_outpost (&self) -> bool {
-        match self {
-            Base::Outpost(_) => true,
-            _ => false
-        }
-    }
+    pub content: Option<PlaySet>
 }
 
 impl Card {
@@ -52,4 +41,17 @@ impl Hash for Card {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
+}
+
+impl PartialEq for Card {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name &&
+            self.cost == other.cost &&
+            self.base == other.base &&
+            self.synergizes_with == other.synergizes_with
+    }
+}
+
+impl Eq for Card {
+
 }

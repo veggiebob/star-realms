@@ -1,15 +1,17 @@
 extern crate yaml_rust;
 extern crate regex;
-use std::collections::{HashSet};
+
+use std::collections::HashSet;
 use std::fs;
 
-use crate::game::components::card::{Base, Card};
-use crate::game::components::faction::Faction;
-
-use self::yaml_rust::{Yaml, YamlLoader};
-use self::regex::Regex;
-use crate::game::Goods;
+use crate::game::components::card::Card;
+use crate::game::components::card::details::Base;
 use crate::game::components::Coin;
+use crate::game::components::faction::Faction;
+use crate::game::Goods;
+
+use self::regex::Regex;
+use self::yaml_rust::{Yaml, YamlLoader};
 
 pub fn parse_file (filepath: String) -> Result<Vec<Card>, String> {
     let contents = fs::read_to_string(filepath);
@@ -106,6 +108,7 @@ pub fn parse_card (name: &str, yaml: Yaml) -> Result<Card, String> {
         name: name.to_owned(),
         base,
         synergizes_with,
+        content: None
     })
 }
 

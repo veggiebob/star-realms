@@ -15,6 +15,7 @@ use crate::game::util::Failure::{Succeed, Fail};
 pub mod components;
 pub mod card_library;
 pub mod util;
+pub mod actions;
 
 type CardStack = Stack<Card>;
 pub type HandId = u32;

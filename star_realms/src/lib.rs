@@ -9,7 +9,7 @@ mod tests {
     use yaml_rust::yaml::Yaml::Hash;
     use yaml_rust::YamlLoader;
 
-    use crate::game::components::card::Base;
+    use crate::game::components::card::details::{Base, Action, Requirement, Sacrifice};
     use crate::game::components::card::Card;
     use crate::game::components::faction::Faction;
     use crate::game::components::stack::Stack;
@@ -18,6 +18,7 @@ mod tests {
     use crate::game::card_library::CardLibrary;
     use std::mem;
     use crate::game::util::Join;
+    use crate::game::actions::{add_goods, draw_card};
 
     #[test]
     fn test_shuffle() {
@@ -85,10 +86,45 @@ card2:
     }
 
     #[test]
+    fn card_test_1() {
+        let card = Card {
+            cost: 3,
+            name: "Outland Station".to_string(),
+            base: Some(Base::Base(4)),
+            synergizes_with: {
+                let mut set = HashSet::new();
+                set.insert(Faction::Fed);
+                set
+            },
+            content: Some(vec![
+                (
+                    None,
+                    Action::Unit(
+                        Join::choose(vec![
+                            add_goods(Goods { trade: 1, authority: 0, combat: 0 }),
+                            add_goods(Goods { trade: 0, authority: 3, combat: 0 })
+                        ])
+                    )
+                ),
+                (
+                    Some(
+                        Join::Unit(
+                            Requirement::Cost(
+                                Sacrifice { scrap: true, goods: None }
+                            )
+                        )
+                    ),
+                    Action::Unit(Join::Unit(draw_card()))
+                )
+            ])
+        };
+    }
+
+    #[test]
     fn join_playground() {
         let joined = Join::Unit(5);
         let v = vec![1, 2, 3, 4, 5];
-        let joined_2 = Join::all(v.iter());
+        let joined_2 = Join::all(v);
         println!("{:?}", if let Join::All(xs) = joined_2 {
             xs
         } else {

@@ -13,18 +13,21 @@ impl<T: Display> Failure<T> {
     }
 }
 
-#[derive(Debug)]
-pub enum Join<T> {
+#[derive(Debug, Clone)]
+pub enum Join<T: Clone> {
     Unit(T),
     All(Vec<Box<Join<T>>>),
     Choose(Vec<Box<Join<T>>>)
 }
 
-impl<T> Join<T> {
-    pub fn all<I: Iterator<Item=T>>(items: I) -> Join<T> {
-        Join::All(items.map(Join::Unit).map(Box::new).collect())
+impl<T: Clone> Join<T> {
+    pub fn unit(item: T) -> Join<T> {
+        Join::Unit(item)
     }
-    pub fn choose<I: Iterator<Item=T>>(items: I) -> Join<T> {
-        Join::Choose(items.map(Join::Unit).map(Box::new).collect())
+    pub fn all(items: Vec<T>) -> Join<T> {
+        Join::All(items.into_iter().map(Join::Unit).map(Box::new).collect())
+    }
+    pub fn choose(items: Vec<T>) -> Join<T> {
+        Join::Choose(items.into_iter().map(Join::Unit).map(Box::new).collect())
     }
 }
