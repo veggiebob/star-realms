@@ -113,12 +113,57 @@ pub trait UserActionSupplier {
 }
 
 pub struct PlayerArea {
-
+    hand: HashSet<CardRef>,
+    table: HashSet<CardRef>,
+    turn_data: (),
+    deck: Stack<CardRef>,
+    discard: Stack<CardRef>
 }
 
 impl PlayerArea {
     pub fn new(scout: CardRef, viper: CardRef) -> PlayerArea {
-        todo!()
+        PlayerArea {
+            hand: HashSet::new(),
+            table: HashSet::new(),
+            turn_data: (),
+            deck: {
+                let mut stack = Stack::empty();
+                for _ in 0..8 {
+                    stack.add(scout.clone());
+                }
+                for _ in 0..2 {
+                    stack.add(viper.clone());
+                }
+                stack.shuffle();
+                stack
+            },
+            discard: Stack::empty(),
+        }
+    }
+
+    pub fn draw_card(&mut self) -> Option<CardRef> {
+        if self.deck.len() + self.discard.len() == 0 {
+            None
+        } else {
+            match self.deck.draw() {
+                None => {
+                    self.discard.shuffle();
+                    self.discard.move_all_to(&mut self.deck);
+                    self.draw_card()
+                },
+                x => x
+            }
+        }
+    }
+
+    pub fn draw_card_into_hand(&mut self) -> Failure<String> {
+        match self.draw_card() {
+            Some(card) => {
+                self.hand.insert(card);
+                Succeed
+            },
+            None => Failure::Fail("Empty deck and discard".to_string())
+        }
     }
 }
 

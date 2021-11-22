@@ -1,7 +1,9 @@
 use crate::game::components::Defense;
 use crate::game::components::Goods;
-use crate::game::util::Join;
+use crate::game::util::{Join, Failure};
 use std::fmt::{Debug, Formatter};
+use crate::game::GameState;
+use std::rc::Rc;
 
 
 /// number type for counting cards
@@ -86,7 +88,7 @@ trade row
 
  */
 /// function that alters game data
-type ActionFunc = ();
+type ActionFunc = dyn FnMut(&mut GameState) -> Failure<String>;
 
 type ClientActionOptionQuery = ();
 
@@ -96,17 +98,17 @@ pub enum Action {
     Unit(Join<Actionable>)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Actionable {
 
     /// function that operates on game data when this action is chosen
     /// by the client
-    run: ActionFunc,
+    pub run: Rc<Box<ActionFunc>>,
 
     /// some data structure representing a request for a decision from the client
     /// this will be blocking
     /// in the case where there is no query, just run the action
-    client_query: Option<ClientActionOptionQuery>
+    pub client_query: Option<ClientActionOptionQuery>
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -130,5 +132,27 @@ impl Debug for Requirement {
             Requirement::Condition(_) => f.debug_tuple("").finish(),
             Requirement::Cost(sacrifice) => sacrifice.fmt(f)
         }
+    }
+}
+
+impl Actionable {
+    pub fn no_args<F: 'static + FnMut(&mut GameState) -> Failure<String>>(f: F) -> Actionable {
+        Actionable {
+            client_query: None,
+            run: Rc::new(Box::new(f))
+        }
+    }
+    pub fn new<F>(query: ClientActionOptionQuery, f: F) -> Actionable
+        where F: 'static + FnMut(&mut GameState) -> Failure<String> {
+        Actionable {
+            client_query: Some(query),
+            run: Rc::new(Box::new(f))
+        }
+    }
+}
+
+impl Debug for Actionable {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.client_query.fmt(f)
     }
 }

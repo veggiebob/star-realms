@@ -1,0 +1,10 @@
+
+there needs to be an object keeping track of turn events
+
+this object would contain:
+ . number of cards scrapped during the turn
+
+
+A turn needs to have a "clean up" phase
+    Perhaps this can be a collection of actions that are run sequentially at the end of a turn?
+With sequential actions, can the turn be played normally between actions?

@@ -75,6 +75,16 @@ impl<T> Stack<T> {
         }
     }
 
+    pub fn move_all_to(&mut self, other: &mut Stack<T>) {
+        match self.draw() {
+            None => (),
+            Some(card) => {
+                other.add(card);
+                self.move_all_to(other)
+            }
+        }
+    }
+
     pub fn iter(&self) -> Iter<'_, T> {
         self.elements.iter()
     }

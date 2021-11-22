@@ -11,7 +11,7 @@ mod tests {
     use yaml_rust::YamlLoader;
 
     use crate::game::{GameState, PlayerArea};
-    use crate::game::actions::{add_goods, draw_card, scrap_card};
+    use crate::game::actions::{add_goods, draw_card, scrap_card, specially_place_next_acquired};
     use crate::game::card_library::CardLibrary;
     use crate::game::components::card::Card;
     use crate::game::components::card::details::{Action, Base, Exhaustibility, Play, Requirement, Sacrifice, CardSource};
@@ -182,6 +182,34 @@ card2:
                 }
             ])
         };
+
+        let card_4 = Card {
+            cost: 7,
+            name: "Trade Envoy".to_string(),
+            base: None,
+            synergizes_with: vec![Faction::Fed].into_iter().collect(),
+            content: Some(vec![
+                Play {
+                    cond: None,
+                    actn: Action::Unit(Join::all(vec![
+                        add_goods(Goods { trade: 3, authority: 5, combat: 0 }),
+                        draw_card()
+                    ])),
+                    exhaust: Exhaustibility::Once
+                },
+                Play {
+                    cond: Some(Join::all(vec![
+                        Requirement::Cost(Sacrifice::ScrapThis),
+                        synergy(Faction::Fed)
+                    ])),
+                    actn: Action::Unit(Join::Unit(
+                        specially_place_next_acquired(CardSource::Hand)
+                    )),
+                    exhaust: Exhaustibility::Once
+                }
+            ])
+        };
+
     }
 
     #[test]
