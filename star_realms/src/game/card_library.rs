@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use crate::game::components::stack::Stack;
 use std::rc::Rc;
 use crate::parse::parse_file;
+use crate::game::CardStack;
 
 pub struct CardLibrary {
-    all_cards: Vec<Rc<Card>>,
-    id_map: HashMap<u32, Rc<Card>>,
+    all_cards: Vec<CardRef>,
+    id_map: HashMap<u32, CardRef>,
     id_lookup: HashMap<String, u32>,
     trade_stack: Stack<u32>
 }
@@ -86,12 +87,12 @@ impl CardLibrary {
         }
     }
 
-    pub fn get_new_trade_stack(&self) -> Vec<u32> {
-        let mut vec = vec![];
-        for id in self.trade_stack.iter() {
-            vec.push(id.clone());
-        }
-        vec
+    pub fn get_new_trade_stack(&self) -> CardStack {
+        Stack::new(
+            self.trade_stack.elements
+                .clone().into_iter()
+                .map(|x| self.id_map.get(&x).unwrap().clone())
+                .collect())
     }
 
     pub fn get_card_by_name(&self, name: &str) -> Option<Rc<Card>> {

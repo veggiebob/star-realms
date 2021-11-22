@@ -84,7 +84,6 @@ impl<T> Stack<T> {
             }
         }
     }
-
     pub fn iter(&self) -> Iter<'_, T> {
         self.elements.iter()
     }

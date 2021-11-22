@@ -37,9 +37,16 @@ pub fn scrap_card(sources: HashSet<CardSource>) -> Actionable {
     }
     Actionable::new(Join::choose(joined), |game, config| {
         let cfg = config.ok_or_else(|| CONFIG_REQUIRED.to_string())?;
+
         if let ClientActionOptionResponse::CardSelection(source, index) = cfg {
-            // game.get_card_from_source(source).map(|c| game.scrapped.add(c))?; // some invalid index error will arise here
-            todo!()
+            let mut stack = game.get_stack_mut(source);
+            match stack.remove(index as usize) {
+                None => Err(format!("Accessing {:?} at index {} is out of bounds", source, index)),
+                Some(card) => {
+                    game.scrapped.add(card);
+                    Ok(())
+                }
+            }
         } else {
             Err(format!("{:?} caused -> {}", cfg, WRONG_CONFIG))
         }

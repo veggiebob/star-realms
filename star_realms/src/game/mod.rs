@@ -11,6 +11,8 @@ use crate::game::components::{Authority, Coin, Combat, Goods};
 use crate::game::components::card::{Card, CardRef};
 use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
+use crate::game::components::card::details::CardSource;
+use crate::game::RelativePlayer::{Current, Opponent};
 
 pub mod components;
 pub mod card_library;
@@ -18,7 +20,7 @@ pub mod util;
 pub mod actions;
 pub mod requirements;
 
-type CardStack = Stack<Card>;
+type CardStack = Stack<CardRef>;
 pub type HandId = u32;
 
 #[derive(Debug)]
@@ -76,10 +78,10 @@ pub struct GameState {
     player1: PlayerArea,
     player2: PlayerArea,
     current_player: Player,
-    pub trade_row: Stack<u32>,
+    pub trade_row: CardStack,
     pub explorers: u8,
     pub scrapped: CardStack,
-    pub trade_row_stack: Stack<u32>,
+    pub trade_row_stack: CardStack,
     pub card_library: Rc<CardLibrary>,
 }
 
@@ -113,19 +115,19 @@ pub trait UserActionSupplier {
 }
 
 pub struct PlayerArea {
-    hand: HashSet<CardRef>,
-    table: HashSet<CardRef>,
+    hand: CardStack,
+    table: CardStack,
     turn_data: (),
-    deck: Stack<CardRef>,
-    discard: Stack<CardRef>,
+    deck: CardStack,
+    discard: CardStack,
     current_goods: Goods
 }
 
 impl PlayerArea {
     pub fn new(scout: CardRef, viper: CardRef) -> PlayerArea {
         PlayerArea {
-            hand: HashSet::new(),
-            table: HashSet::new(),
+            hand: CardStack::empty(),
+            table: CardStack::empty(),
             turn_data: (),
             deck: {
                 let mut stack = Stack::empty();
@@ -161,7 +163,7 @@ impl PlayerArea {
     pub fn draw_card_into_hand(&mut self) -> Failure<String> {
         match self.draw_card() {
             Some(card) => {
-                self.hand.insert(card);
+                self.hand.add(card);
                 Succeed
             },
             None => Failure::Fail("Empty deck and discard".to_string())
@@ -183,7 +185,7 @@ impl GameState {
             explorers: 10,
             scrapped: CardStack::empty(),
             trade_row_stack: {
-                let mut stack = Stack::new(card_library.get_new_trade_stack());
+                let mut stack = card_library.get_new_trade_stack();
                 stack.shuffle();
                 stack
             },
@@ -209,17 +211,6 @@ impl GameState {
         }
     }
 
-    pub fn unpack_multi_trade_row_card_selection(&self, bits: &u32) -> HashSet<u32> {
-        let mut ids = HashSet::new();
-        let num_cards = self.trade_row.len();
-        for i in 0..num_cards {
-            if ((1<<i) & bits) > 0 {
-                ids.insert(i as u32);
-            }
-        }
-        ids
-    }
-
     /// ids: the indices of the cards to be removed
     pub fn remove_cards_from_trade_row(&mut self, ids: HashSet<u32>) -> HashSet<CardRef> {
         let mut ids: Vec<_> = ids.iter().collect();
@@ -227,11 +218,29 @@ impl GameState {
         ids.reverse(); // remove them from biggest to smallest to prevent shifting
         let mut cards = HashSet::new();
         for i in ids {
-            let id = self.trade_row.remove(*i as usize)
+            let card = self.trade_row.remove(*i as usize)
                 .ok_or(format!("{} is not a valid index in the trade row", i)).unwrap();
-            cards.insert(Rc::clone(&self.card_library.get_card_by_id(&id).unwrap()));
+            cards.insert(card.clone());
         }
         cards
+    }
+
+    pub fn get_stack_mut(&mut self, card_source: CardSource) -> &mut CardStack {
+        match card_source {
+            CardSource::Deck(player) => match player {
+                Current => &mut self.get_current_player_mut().deck,
+                Opponent => &mut self.get_current_opponent_mut().deck
+            },
+            CardSource::Discard(player) => match player {
+                Current => &mut self.get_current_player_mut().discard,
+                Opponent => &mut self.get_current_opponent_mut().discard
+            },
+            CardSource::Hand(player) => match player {
+                Current => &mut self.get_current_player_mut().hand,
+                Opponent => &mut self.get_current_opponent_mut().hand
+            },
+            CardSource::TradeRow => &mut self.trade_row
+        }
     }
 
     fn flip_turn(&mut self) {

@@ -61,7 +61,7 @@ pub enum Sacrifice {
     // DiscardThis??
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum CardSource {
     Hand(RelativePlayer),
     Discard(RelativePlayer),
@@ -143,14 +143,14 @@ impl Debug for Requirement {
 }
 
 impl Actionable {
-    pub fn no_args<F>(mut f: F) -> Actionable
+    pub fn no_args<F>(f: F) -> Actionable
         where F: 'static + FnMut(&mut GameState, ActionConfig) -> ActionResult {
         Actionable {
             client_query: None,
             run: Rc::new(Box::new(f))
         }
     }
-    pub fn new<F>(query: Join<ClientActionOptionQuery>, mut f: F) -> Actionable
+    pub fn new<F>(query: Join<ClientActionOptionQuery>, f: F) -> Actionable
         where F: 'static + FnMut(&mut GameState, ActionConfig) -> ActionResult {
         Actionable {
             client_query: Some(query),
