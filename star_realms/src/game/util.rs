@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use crate::game::util::Failure::{Fail, Succeed};
 
 pub enum Failure<T> {
     Fail(T),
@@ -9,6 +10,14 @@ impl<T: Display> Failure<T> {
     pub fn check(&self) {
         if let Failure::Fail(message) = self {
             panic!("Failure was unwrapped! {}", message);
+        }
+    }
+}
+impl<T> Failure<T> {
+    pub fn as_result(self) -> Result<(), T> {
+        match self {
+            Fail(x) => Err(x),
+            Succeed => Ok(())
         }
     }
 }

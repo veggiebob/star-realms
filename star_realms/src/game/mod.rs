@@ -7,7 +7,7 @@ use std::rc::Rc;
 use components::stack::Stack;
 
 use crate::game::card_library::CardLibrary;
-use crate::game::components::{Authority, Coin, Combat};
+use crate::game::components::{Authority, Coin, Combat, Goods};
 use crate::game::components::card::{Card, CardRef};
 use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
@@ -57,7 +57,7 @@ impl Player {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum RelativePlayer {
     Current,
     Opponent
@@ -117,7 +117,8 @@ pub struct PlayerArea {
     table: HashSet<CardRef>,
     turn_data: (),
     deck: Stack<CardRef>,
-    discard: Stack<CardRef>
+    discard: Stack<CardRef>,
+    current_goods: Goods
 }
 
 impl PlayerArea {
@@ -138,6 +139,7 @@ impl PlayerArea {
                 stack
             },
             discard: Stack::empty(),
+            current_goods: Goods::none()
         }
     }
 

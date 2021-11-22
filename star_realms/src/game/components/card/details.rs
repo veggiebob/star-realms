@@ -1,10 +1,13 @@
+use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
+use std::rc::Rc;
+use std::str::FromStr;
+
+use crate::game::actions::client_comms::{ClientActionOptionQuery, ClientActionOptionResponse};
 use crate::game::components::Defense;
 use crate::game::components::Goods;
-use crate::game::util::{Join, Failure};
-use std::fmt::{Debug, Formatter};
-use crate::game::GameState;
-use std::rc::Rc;
-
+use crate::game::{GameState, RelativePlayer};
+use crate::game::util::{Failure, Join};
 
 /// number type for counting cards
 pub type CardSizeT = u32;
@@ -60,8 +63,10 @@ pub enum Sacrifice {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CardSource {
-    Hand,
-    Discard
+    Hand(RelativePlayer),
+    Discard(RelativePlayer),
+    Deck(RelativePlayer),
+    TradeRow
 }
 
 /*
@@ -85,12 +90,14 @@ opponent* hand
 opponent* free area (destroying target base)
 trade row
 
-
  */
 /// function that alters game data
-type ActionFunc = dyn FnMut(&mut GameState) -> Failure<String>;
+/// a "fail" indicates an action that was valid but had an error during it,
+/// so the exhaustion should be reset
+type ActionFunc = dyn FnMut(&mut GameState, ActionConfig) -> ActionResult;
 
-type ClientActionOptionQuery = ();
+type ActionConfig = Option<ClientActionOptionResponse>;
+type ActionResult = Result<(), String>;
 
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -108,7 +115,7 @@ pub struct Actionable {
     /// some data structure representing a request for a decision from the client
     /// this will be blocking
     /// in the case where there is no query, just run the action
-    pub client_query: Option<ClientActionOptionQuery>
+    pub client_query: Option<Join<ClientActionOptionQuery>>
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -136,14 +143,15 @@ impl Debug for Requirement {
 }
 
 impl Actionable {
-    pub fn no_args<F: 'static + FnMut(&mut GameState) -> Failure<String>>(f: F) -> Actionable {
+    pub fn no_args<F>(mut f: F) -> Actionable
+        where F: 'static + FnMut(&mut GameState, ActionConfig) -> ActionResult {
         Actionable {
             client_query: None,
             run: Rc::new(Box::new(f))
         }
     }
-    pub fn new<F>(query: ClientActionOptionQuery, f: F) -> Actionable
-        where F: 'static + FnMut(&mut GameState) -> Failure<String> {
+    pub fn new<F>(query: Join<ClientActionOptionQuery>, mut f: F) -> Actionable
+        where F: 'static + FnMut(&mut GameState, ActionConfig) -> ActionResult {
         Actionable {
             client_query: Some(query),
             run: Rc::new(Box::new(f))

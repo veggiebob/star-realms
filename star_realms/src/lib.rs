@@ -10,7 +10,7 @@ mod tests {
     use yaml_rust::yaml::Yaml::Hash;
     use yaml_rust::YamlLoader;
 
-    use crate::game::{GameState, PlayerArea};
+    use crate::game::{GameState, PlayerArea, RelativePlayer};
     use crate::game::actions::{add_goods, draw_card, scrap_card, specially_place_next_acquired};
     use crate::game::card_library::CardLibrary;
     use crate::game::components::card::Card;
@@ -144,8 +144,8 @@ card2:
                         Requirement::Cost(Sacrifice::Scrap(
                             1,
                             Join::choose(vec![
-                                CardSource::Discard,
-                                CardSource::Hand
+                                CardSource::Discard(RelativePlayer::Current),
+                                CardSource::Hand(RelativePlayer::Current)
                             ])
                         ))
                     )),
@@ -170,7 +170,7 @@ card2:
                     actn: Action::Unit(Join::all(vec![
                         add_goods(Goods::trade(1)),
                         scrap_card(
-                            vec![CardSource::Discard, CardSource::Hand]
+                            vec![CardSource::Discard(RelativePlayer::Current), CardSource::Hand(RelativePlayer::Current)]
                                 .into_iter().collect())
                     ])),
                     exhaust: Exhaustibility::Once
@@ -203,7 +203,7 @@ card2:
                         synergy(Faction::Fed)
                     ])),
                     actn: Action::Unit(Join::Unit(
-                        specially_place_next_acquired(CardSource::Hand)
+                        specially_place_next_acquired(CardSource::Hand(RelativePlayer::Current))
                     )),
                     exhaust: Exhaustibility::Once
                 }
