@@ -13,6 +13,7 @@ use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
 use crate::game::components::card::details::CardSource;
 use crate::game::RelativePlayer::{Current, Opponent};
+use crate::game::actions::client_comms::Client;
 
 pub mod components;
 pub mod card_library;
@@ -169,10 +170,12 @@ impl PlayerArea {
             None => Failure::Fail("Empty deck and discard".to_string())
         }
     }
+
+
 }
 
 impl GameState {
-    /// panics if there is no scout or viper
+    /// panics if there is no scout or viper (because CardLibrary can only be created using them)
     /// this is helpful https://www.starrealms.com/sets-and-expansions/
     pub fn new (card_library: Rc<CardLibrary>) -> GameState {
         let scout = card_library.get_scout().expect("card library needs a scout!");
@@ -194,11 +197,6 @@ impl GameState {
         // todo: number of cards in trade row hard-coded
         gs.fill_trade_row(5);
         gs
-    }
-
-    pub fn from_config(config_folder: &str) -> Result<GameState, String> {
-        let cl = CardLibrary::from_config(config_folder)?;
-        Ok(GameState::new(Rc::new(cl)))
     }
 
     fn fill_trade_row(&mut self, num: usize) {
@@ -301,4 +299,9 @@ impl GameState {
     pub fn turn_is_player2(&self) -> bool {
         !self.turn_is_player1()
     }
+
+    pub fn advance<T: Client>(client: &T) {
+
+    }
+
 }

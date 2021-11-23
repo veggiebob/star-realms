@@ -9,7 +9,7 @@ pub struct CardLibrary {
     all_cards: Vec<CardRef>,
     id_map: HashMap<u32, CardRef>,
     id_lookup: HashMap<String, u32>,
-    trade_stack: Stack<u32>
+    trade_stack: Stack<u32>,
 }
 
 impl CardLibrary {

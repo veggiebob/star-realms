@@ -13,3 +13,13 @@ pub enum ClientActionOptionResponse {
     /// the card chosen from the source, the index given
     CardSelection(CardSource, CardSizeT)
 }
+
+pub trait Client {
+
+    /// function that should be able to answer these "action requests"
+    /// that are configuration for an action
+    fn resolve_action_query(query: ClientActionOptionQuery) -> ClientActionOptionResponse;
+
+
+
+}

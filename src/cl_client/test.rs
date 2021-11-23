@@ -1,6 +1,7 @@
 use crate::cl_client::client::{get_value_input, parse_vec};
 use ansi_term::Color;
 use ansi_term::Style;
+use star_realms::game::components::card::Card;
 
 #[test]
 pub fn test_input() {

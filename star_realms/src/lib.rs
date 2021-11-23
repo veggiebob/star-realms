@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 pub mod game;
+pub mod resources;
 mod parse;
 
 #[cfg(test)]
@@ -14,7 +15,7 @@ mod tests {
     use crate::game::actions::{add_goods, draw_card, scrap_card, specially_place_next_acquired};
     use crate::game::card_library::CardLibrary;
     use crate::game::components::card::Card;
-    use crate::game::components::card::details::{Action, Base, Exhaustibility, Play, Requirement, Sacrifice, CardSource};
+    use crate::game::components::card::details::{Action, Base, Exhaustibility, Play, Requirement, Sacrifice, CardSource, Actionable};
     use crate::game::components::faction::Faction;
     use crate::game::components::Goods;
     use crate::game::components::stack::Stack;
@@ -87,8 +88,7 @@ card2:
         println!("Size of HashSet<(String, String)>: {}", mem::size_of::<HashSet<(String, String)>>());
     }
 
-    #[test]
-    fn card_test_1() {
+    pub fn get_debug_cards() -> Vec<Card> {
         let card = Card {
             cost: 3,
             name: "Outland Station".to_string(),
@@ -210,6 +210,71 @@ card2:
             ])
         };
 
+        let card_5 = Card {
+            name: "Captured Outpost".to_string(),
+            cost: 3,
+            base: Some(Base::Outpost(3)),
+            synergizes_with: vec![Faction::Star].into_iter().collect(),
+            content: Some(vec![
+                Play {
+                    cond: None,
+                    actn: Action::Sequential(
+                        Box::new(Join::Unit(
+                            Action::Unit(Join::Unit(
+                                draw_card()
+                            ))
+                        )),
+                        Box::new(Join::Unit(
+                            Action::Unit(Join::Unit(
+                                // discard_card()
+                                todo!()
+                            ))
+                        ))
+                    ),
+                    exhaust: Exhaustibility::Once
+                }
+            ])
+        };
+
+        let card_6 = Card {
+            cost: 1,
+            synergizes_with: vec![Faction::Fed].into_iter().collect(),
+            name: "Cargo Rocket".to_string(),
+            base: None,
+            content: Some(vec![
+                Play {
+                    cond: None,
+                    actn: Action::Unit(Join::Unit(add_goods(Goods {
+                        authority: 3,
+                        combat: 2,
+                        trade: 1
+                    }))),
+                    exhaust: Exhaustibility::Once
+                },
+                Play {
+                    cond: Some(Join::all(vec![
+                        synergy(Faction::Fed),
+                        Requirement::Cost(Sacrifice::ScrapThis)
+                    ])),
+                    actn: Action::Unit(Join::Unit(
+                        Actionable::no_args(|game, _| {
+                            // add a trigger to the game
+                            // "Put the next ship you acquire this turn on top of your deck"
+                            todo!()
+                        })
+                    )),
+                    exhaust: Exhaustibility::Once
+                }
+            ])
+        };
+        vec![
+            card,
+            card_2,
+            card_3,
+            card_4,
+            card_5,
+            card_6
+        ]
     }
 
     #[test]
