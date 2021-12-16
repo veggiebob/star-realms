@@ -2,39 +2,34 @@ use rand::Rng;
 use std::slice::Iter;
 use std::collections::HashSet;
 
-pub trait Stack {
-    type Item;
+pub trait Stack<Item> {
     fn len(&self) -> usize;
-    fn remove(&mut self, index: usize) -> Option<Self::Item>;
-    fn get(&self, index: usize) -> Option<&Self::Item>;
-    fn add(&mut self, item: Self::Item);
-    fn iter(&self) -> Iter<'_, Self::Item>;
-    fn draw(&mut self) -> Option<Self::Item> {
+    fn get(&self, index: usize) -> Option<&Item>;
+    fn iter(&self) -> Iter<'_, Item>;
+    fn add(&mut self, item: Item);
+    fn remove(&mut self, index: usize) -> Option<Item>;
+    fn draw(&mut self) -> Option<Item> {
         self.remove(self.len() - 1)
     }
-    fn peek(&self) -> Option<&Self::Item> {
+    fn peek(&self) -> Option<&Item> {
         self.get(self.len() - 1)
     }
     fn shuffle(&mut self) {
         let mut rng = rand::thread_rng();
         let total_iters = self.len();
         for i in 0..total_iters {
-            let x = self.remove(rng.gen_range(0..total_iters-i));
+            let x = self.remove(rng.gen_range(0..total_iters-i)).unwrap();
             self.add(x);
         }
     }
-    fn draw_to<S: Stack<Item=Self::Item>>(&mut self, other: &mut S) {
-        if let Some(i) = self.draw() {
-            other.add(i);
-        }
-    }
-    fn move_all_to<S: Stack<Item=Self::Item>>(&mut self, other: &mut S) {
-        match self.draw() {
-            None => (),
-            Some(card) => {
-                other.add(card);
-                self.move_all_to(other)
-            }
+}
+
+pub fn move_all_to<I, S: Stack<I>, T: Stack<I>>(from: &mut T, to: &mut S) {
+    match from.draw() {
+        None => (),
+        Some(card) => {
+            to.add(card);
+            move_all_to(from, to)
         }
     }
 }
@@ -57,8 +52,7 @@ impl<T> SimpleStack<T> {
     }
 }
 
-impl<T> Stack for SimpleStack<T> {
-    type Item = T;
+impl<T> Stack<T> for SimpleStack<T> {
 
     fn len(&self) -> usize {
         self.elements.len()
@@ -72,7 +66,7 @@ impl<T> Stack for SimpleStack<T> {
         }
     }
 
-    fn get(&self, index: usize) -> Option<&Self::Item> {
+    fn get(&self, index: usize) -> Option<&T> {
         self.elements.get(index)
     }
 
@@ -99,7 +93,7 @@ impl<T> Stack for SimpleStack<T> {
     //     }
     // }
 
-    fn iter(&self) -> Iter<'_, Self::Item> {
+    fn iter(&self) -> Iter<'_, T> {
         self.elements.iter()
     }
 }

@@ -1,6 +1,6 @@
 use crate::game::components::card::{Card, CardRef};
 use std::collections::HashMap;
-use crate::game::components::stack::SimpleStack;
+use crate::game::components::stack::{SimpleStack, Stack};
 use std::rc::Rc;
 use crate::parse::parse_file;
 use crate::game::CardStack;

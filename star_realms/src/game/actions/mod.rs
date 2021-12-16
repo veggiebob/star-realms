@@ -48,7 +48,8 @@ pub fn scrap_card(sources: HashSet<CardSource>) -> Actionable {
                     Ok(())
                 }
             }
-        } else { // says this else statement is redundant, but it's not
+        } else { // says this else statement is redundant, which it is, but only because
+            // ClientActionOptionResponse is lacking implementation atm
             Err(format!("{:?} caused -> {}", cfg, WRONG_CONFIG))
         }
     })

@@ -16,7 +16,7 @@ use crate::game::components::card::details::CardSource;
 use crate::game::RelativePlayer::{Current, Opponent};
 use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
-use crate::game::components::stack::Stack;
+use crate::game::components::stack::{Stack, move_all_to};
 
 pub mod components;
 pub mod card_library;
@@ -119,8 +119,8 @@ pub struct PlayerArea {
 impl PlayerArea {
     pub fn new(scout: CardRef, viper: CardRef) -> PlayerArea {
         let mut pa = PlayerArea {
-            hand: IdCardCollection::new(SimpleStack::empty()),
-            table: IdCardCollection::new(SimpleStack::empty()),
+            hand: IdCardCollection::new(SimpleStack::empty(), &HashSet::new()),
+            table: IdCardCollection::new(SimpleStack::empty(), &HashSet::new()),
             turn_data: TurnData {
                 to_be_scrapped: HashSet::new(),
                 to_be_discarded: HashSet::new(),
@@ -154,7 +154,7 @@ impl PlayerArea {
             match self.deck.draw() {
                 None => {
                     self.discard.shuffle();
-                    self.discard.move_all_to(&mut self.deck);
+                    move_all_to(&mut self.discard, &mut self.deck);
                     self.draw_card()
                 },
                 x => x
@@ -165,7 +165,8 @@ impl PlayerArea {
     pub fn draw_card_into_hand(&mut self) -> Failure<String> {
         match self.draw_card() {
             Some(card) => {
-                self.hand.add(card);
+                let active_card = self.activate_card(card, true, true);
+                self.hand.add(active_card);
                 Succeed
             },
             None => Failure::Fail("No cards in deck nor discard".to_string())
@@ -251,8 +252,7 @@ impl GameState {
         cards
     }
 
-    pub fn get_stack_mut<S>(&mut self, card_source: CardSource) -> &mut S
-        where S: Stack<Item=CardRef> {
+    pub fn get_stack_mut(&mut self, card_source: CardSource) -> &mut dyn Stack<CardRef> {
         match card_source {
             CardSource::Deck(player) => match player {
                 Current => &mut self.get_current_player_mut().deck,
@@ -263,8 +263,8 @@ impl GameState {
                 Opponent => &mut self.get_current_opponent_mut().discard
             },
             CardSource::Hand(player) => match player {
-                Current => &mut self.get_current_player_mut().hand.cards,
-                Opponent => &mut self.get_current_opponent_mut().hand.cards
+                Current => &mut self.get_current_player_mut().hand,
+                Opponent => &mut self.get_current_opponent_mut().hand
             },
             CardSource::TradeRow => &mut self.trade_row
         }
@@ -341,7 +341,8 @@ impl GameState {
         // 3. discard all cards in hand
         //  - discard all cards scheduled to be discarded
         //  - scrap all cards scheduled to be scrapped
-        current.hand.draw_to(&mut current.discard);
+        // current.hand.move_all_to(&mut current.discard);
+        move_all_to(&mut current.hand, &mut current.discard);
 
         // 4. draw 5 cards into hand
         current.draw_cards_into_hand(5);
