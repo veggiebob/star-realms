@@ -12,7 +12,7 @@ use crate::game::components::card::details::PlaySet;
 use std::rc::Rc;
 
 pub mod details;
-
+pub mod active_card;
 pub type CardRef = Rc<Card>;
 
 #[derive(Debug)]
@@ -55,6 +55,4 @@ impl PartialEq for Card {
     }
 }
 
-impl Eq for Card {
-
-}
+impl Eq for Card {}

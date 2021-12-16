@@ -4,9 +4,16 @@ use std::str::FromStr;
 
 use ansi_term::Color;
 use star_realms::game::{AbstractPlayerAction, Feedback, GameState, RelativePlayer, UserActionIntent, UserActionSupplier};
+use star_realms::game::actions::client_comms::{Client, ClientQuery, ClientActionOptionResponse};
 
-pub struct Client {
+pub struct ClientPTUI {
     pub name: String
+}
+
+impl Client for ClientPTUI {
+    fn resolve_action_query(query: ClientQuery) -> ClientActionOptionResponse {
+        todo!()
+    }
 }
 
 fn print_options<T: ToString>(options: &Vec<T>) {

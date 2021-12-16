@@ -18,7 +18,7 @@ mod tests {
     use crate::game::components::card::details::{Action, Base, Exhaustibility, Play, Requirement, Sacrifice, CardSource, Actionable};
     use crate::game::components::faction::Faction;
     use crate::game::components::Goods;
-    use crate::game::components::stack::Stack;
+    use crate::game::components::stack::{SimpleStack, Stack};
     use crate::game::util::Join;
     use crate::parse::{parse_card, parse_file, parse_goods};
     use crate::game::requirements::synergy;
@@ -27,7 +27,7 @@ mod tests {
     fn test_shuffle() {
         print_long_message("testing shuffle");
         for _ in 0..10 {
-            let mut stack = Stack::new((1..5).collect());
+            let mut stack = SimpleStack::new((1..5).collect());
             stack.shuffle();
             println!("{:?}", stack);
         }

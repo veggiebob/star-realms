@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use crate::game::components::card::details::{CardSizeT, CardSource};
+use crate::game::Player;
 
 #[derive(Clone, Debug)]
 pub enum ClientActionOptionQuery {
@@ -14,12 +15,14 @@ pub enum ClientActionOptionResponse {
     CardSelection(CardSource, CardSizeT)
 }
 
-pub trait Client {
+pub struct ClientQuery {
+    pub action_query: ClientActionOptionQuery,
+    pub performer: Player
+}
 
+pub trait Client {
     /// function that should be able to answer these "action requests"
     /// that are configuration for an action
-    fn resolve_action_query(query: ClientActionOptionQuery) -> ClientActionOptionResponse;
-
-
+    fn resolve_action_query(query: ClientQuery) -> ClientActionOptionResponse;
 
 }

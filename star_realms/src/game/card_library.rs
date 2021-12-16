@@ -1,6 +1,6 @@
 use crate::game::components::card::{Card, CardRef};
 use std::collections::HashMap;
-use crate::game::components::stack::Stack;
+use crate::game::components::stack::SimpleStack;
 use std::rc::Rc;
 use crate::parse::parse_file;
 use crate::game::CardStack;
@@ -9,7 +9,7 @@ pub struct CardLibrary {
     all_cards: Vec<CardRef>,
     id_map: HashMap<u32, CardRef>,
     id_lookup: HashMap<String, u32>,
-    trade_stack: Stack<u32>,
+    trade_stack: SimpleStack<u32>,
 }
 
 impl CardLibrary {
@@ -61,8 +61,8 @@ impl CardLibrary {
             (id_map, id_lookup)
         };
 
-        let ts: Stack<u32> = {
-            let mut tmp = Stack::empty();
+        let ts: SimpleStack<u32> = {
+            let mut tmp = SimpleStack::empty();
             for card in trade_stack.iter() {
                 tmp.add(id_lookup.get(&card.name).unwrap().clone());
             }
@@ -88,7 +88,7 @@ impl CardLibrary {
     }
 
     pub fn get_new_trade_stack(&self) -> CardStack {
-        Stack::new(
+        SimpleStack::new(
             self.trade_stack.elements
                 .clone().into_iter()
                 .map(|x| self.id_map.get(&x).unwrap().clone())

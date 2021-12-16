@@ -4,16 +4,19 @@ extern crate regex;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use components::stack::Stack;
+use components::card::active_card::IdCardCollection;
+use components::stack::SimpleStack;
 
+use crate::game::actions::client_comms::{Client, ClientActionOptionQuery, ClientQuery};
 use crate::game::card_library::CardLibrary;
 use crate::game::components::{Authority, Coin, Combat, Goods};
 use crate::game::components::card::{Card, CardRef};
-use crate::game::util::Failure;
-use crate::game::util::Failure::{Fail, Succeed};
+use crate::game::components::card::active_card::ActiveCard;
 use crate::game::components::card::details::CardSource;
 use crate::game::RelativePlayer::{Current, Opponent};
-use crate::game::actions::client_comms::Client;
+use crate::game::util::Failure;
+use crate::game::util::Failure::{Fail, Succeed};
+use crate::game::components::stack::Stack;
 
 pub mod components;
 pub mod card_library;
@@ -21,7 +24,7 @@ pub mod util;
 pub mod actions;
 pub mod requirements;
 
-type CardStack = Stack<CardRef>;
+type CardStack = SimpleStack<CardRef>;
 pub type HandId = u32;
 
 #[derive(Debug)]
@@ -103,35 +106,28 @@ pub enum AbstractPlayerAction {
     EndTurn,
 }
 
-pub trait UserActionSupplier {
-
-    fn choose_abstract_action(&self, game: &GameState) -> AbstractPlayerAction;
-
-    fn select_effect(&self, game: &GameState) -> UserActionIntent<(HandId, (String, String))>;
-
-    /// return 0 to attempt to buy an explorer
-    fn select_trade_row_card(&self, game: &GameState) -> UserActionIntent<HandId>;
-
-    fn on_feedback(&self, feedback: Feedback);
-}
-
 pub struct PlayerArea {
-    hand: CardStack,
-    table: CardStack,
-    turn_data: (),
+    hand: IdCardCollection,
+    table: IdCardCollection,
+    turn_data: TurnData,
     deck: CardStack,
     discard: CardStack,
-    current_goods: Goods
+    current_goods: Goods,
+    ids: HashSet<HandId>
 }
 
 impl PlayerArea {
     pub fn new(scout: CardRef, viper: CardRef) -> PlayerArea {
-        PlayerArea {
-            hand: CardStack::empty(),
-            table: CardStack::empty(),
-            turn_data: (),
+        let mut pa = PlayerArea {
+            hand: IdCardCollection::new(SimpleStack::empty()),
+            table: IdCardCollection::new(SimpleStack::empty()),
+            turn_data: TurnData {
+                to_be_scrapped: HashSet::new(),
+                to_be_discarded: HashSet::new(),
+                played_this_turn: HashSet::new()
+            },
             deck: {
-                let mut stack = Stack::empty();
+                let mut stack = SimpleStack::empty();
                 for _ in 0..8 {
                     stack.add(scout.clone());
                 }
@@ -141,9 +137,14 @@ impl PlayerArea {
                 stack.shuffle();
                 stack
             },
-            discard: Stack::empty(),
-            current_goods: Goods::none()
+            discard: SimpleStack::empty(),
+            current_goods: Goods::none(),
+            ids: HashSet::new()
+        };
+        if let Fail(msg) = pa.draw_cards_into_hand(5) {
+            println!("DEV WARNING: {}", msg);
         }
+        pa
     }
 
     pub fn draw_card(&mut self) -> Option<CardRef> {
@@ -167,15 +168,42 @@ impl PlayerArea {
                 self.hand.add(card);
                 Succeed
             },
-            None => Failure::Fail("Empty deck and discard".to_string())
+            None => Failure::Fail("No cards in deck nor discard".to_string())
         }
     }
 
+    fn activate_card(&mut self,
+                     card: CardRef,
+                     will_discard: bool,
+                     played_this_turn: bool
+    ) -> ActiveCard {
+        let mut id = 0;
+        while self.ids.contains(&id) {
+            id += 1;
+        }
+        self.ids.insert(id);
+        ActiveCard {
+            id,
+            card,
+            will_discard,
+            played_this_turn,
+        }
+    }
 
+    pub fn draw_cards_into_hand(&mut self, num: usize) -> Failure<String> {
+        for i in 0..num {
+            if let Fail(_) = self.draw_card_into_hand() {
+                return Fail(format!("Failed to draw {} cards, drew {}.", num, i));
+            }
+        }
+        Succeed
+    }
 }
 
 impl GameState {
-    /// panics if there is no scout or viper (because CardLibrary can only be created using them)
+    /// ## Panic
+    /// If there is no scout or viper (because CardLibrary can only be created using them)
+    /// ## Other
     /// this is helpful https://www.starrealms.com/sets-and-expansions/
     pub fn new (card_library: Rc<CardLibrary>) -> GameState {
         let scout = card_library.get_scout().expect("card library needs a scout!");
@@ -184,7 +212,7 @@ impl GameState {
             player1: PlayerArea::new(Rc::clone(&scout), Rc::clone(&viper)),
             player2: PlayerArea::new(Rc::clone(&scout), Rc::clone(&viper)),
             current_player: Player::Player1,
-            trade_row: Stack::empty(),
+            trade_row: SimpleStack::empty(),
             explorers: 10,
             scrapped: CardStack::empty(),
             trade_row_stack: {
@@ -223,7 +251,8 @@ impl GameState {
         cards
     }
 
-    pub fn get_stack_mut(&mut self, card_source: CardSource) -> &mut CardStack {
+    pub fn get_stack_mut<S>(&mut self, card_source: CardSource) -> &mut S
+        where S: Stack<Item=CardRef> {
         match card_source {
             CardSource::Deck(player) => match player {
                 Current => &mut self.get_current_player_mut().deck,
@@ -234,8 +263,8 @@ impl GameState {
                 Opponent => &mut self.get_current_opponent_mut().discard
             },
             CardSource::Hand(player) => match player {
-                Current => &mut self.get_current_player_mut().hand,
-                Opponent => &mut self.get_current_opponent_mut().hand
+                Current => &mut self.get_current_player_mut().hand.cards,
+                Opponent => &mut self.get_current_opponent_mut().hand.cards
             },
             CardSource::TradeRow => &mut self.trade_row
         }
@@ -300,7 +329,22 @@ impl GameState {
         !self.turn_is_player1()
     }
 
-    pub fn advance<T: Client>(client: &T) {
+    pub fn advance<T: Client>(&mut self, receivers: Vec<&T>) {
+        let current = self.get_current_player_mut();
+
+        // Turn layout:
+        // (should have up to 5 cards in hand)
+        // 1. take any of the actions on any of the cards, provided that it is able
+        //  - keep a running sum of damage (combat)
+
+        // 2. deal damage to the opponent
+        // 3. discard all cards in hand
+        //  - discard all cards scheduled to be discarded
+        //  - scrap all cards scheduled to be scrapped
+        current.hand.draw_to(&mut current.discard);
+
+        // 4. draw 5 cards into hand
+        current.draw_cards_into_hand(5);
 
     }
 

@@ -6,7 +6,7 @@ pub mod main {
     extern crate star_realms;
 
     use ansi_term::Color;
-    use crate::cl_client::client::Client;
+    use crate::cl_client::client::ClientPTUI;
     use self::star_realms::game::GameState;
     use self::star_realms::game::card_library::CardLibrary;
     use self::star_realms::resources::cards::{get_misc_cards, get_debug_cards};
@@ -22,12 +22,12 @@ pub mod main {
         let misc_cards = get_misc_cards();
         let mut cl = Rc::new(CardLibrary::new(cards, misc_cards).unwrap());
         let mut game = GameState::new(cl);
-        let client = Client {
+        let client = ClientPTUI {
             name: "debug user!".to_string()
         };
-        // loop {
-        //     game.advance(&client);
-        // }
+        loop {
+            game.advance(vec![&client]);
+        }
         println!("cl_client::main::debug: Game has ended!");
     }
 }

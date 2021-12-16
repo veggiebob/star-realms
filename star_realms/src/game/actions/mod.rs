@@ -8,6 +8,7 @@ use crate::game::GameState;
 use crate::game::util::Failure::Succeed;
 use crate::game::util::Join;
 use crate::game::actions::client_comms::ClientActionOptionResponse;
+use crate::game::components::stack::Stack;
 
 pub mod client_comms;
 
@@ -47,7 +48,7 @@ pub fn scrap_card(sources: HashSet<CardSource>) -> Actionable {
                     Ok(())
                 }
             }
-        } else {
+        } else { // says this else statement is redundant, but it's not
             Err(format!("{:?} caused -> {}", cfg, WRONG_CONFIG))
         }
     })
