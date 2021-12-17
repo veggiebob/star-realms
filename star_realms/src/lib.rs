@@ -1,4 +1,5 @@
-#![allow(dead_code)]
+#[macro_use] extern crate maplit;
+
 pub mod game;
 pub mod resources;
 mod parse;

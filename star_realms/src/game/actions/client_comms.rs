@@ -23,6 +23,6 @@ pub struct ClientQuery {
 pub trait Client {
     /// function that should be able to answer these "action requests"
     /// that are configuration for an action
-    fn resolve_action_query(query: ClientQuery) -> ClientActionOptionResponse;
-
+    fn resolve_action_query(&mut self, query: ClientQuery) -> ClientActionOptionResponse;
+    fn alert<T>(&self, message: &HashMap<Player, &str>, interrupt: &HashMap<Player, Option<Vec<(&str, T)>>>) -> Option<T>;
 }

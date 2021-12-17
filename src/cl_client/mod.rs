@@ -21,7 +21,7 @@ pub mod main {
         let cards = get_debug_cards();
         let misc_cards = get_misc_cards();
         let mut cl = Rc::new(CardLibrary::new(cards, misc_cards).unwrap());
-        let mut game = GameState::new(cl);
+        let mut game = GameState::new(cl, 80);
         let client = ClientPTUI {
             name: "debug user!".to_string()
         };

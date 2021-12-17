@@ -17,6 +17,7 @@ use crate::game::RelativePlayer::{Current, Opponent};
 use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
 use crate::game::components::stack::{Stack, move_all_to};
+use crate::game::components::card::details::Base::Outpost;
 
 pub mod components;
 pub mod card_library;
@@ -31,7 +32,9 @@ pub type HandId = u32;
 pub struct TurnData {
     to_be_scrapped: HashSet<HandId>,
     to_be_discarded: HashSet<HandId>,
-    played_this_turn: HashSet<HandId>
+    played_this_turn: HashSet<HandId>,
+    total_combat: Combat,
+    money: Coin
 }
 
 impl TurnData {
@@ -39,17 +42,20 @@ impl TurnData {
         TurnData {
             to_be_scrapped: HashSet::new(),
             to_be_discarded: HashSet::new(),
-            played_this_turn: HashSet::new()
+            played_this_turn: HashSet::new(),
+            total_combat: 0,
+            money: 0
         }
     }
     pub fn reset(&mut self)  {
         self.to_be_discarded = HashSet::new();
         self.to_be_scrapped = HashSet::new();
         self.played_this_turn = HashSet::new();
+        self.total_combat = 0;
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Player {
     Player1,
     Player2,
@@ -113,19 +119,16 @@ pub struct PlayerArea {
     deck: CardStack,
     discard: CardStack,
     current_goods: Goods,
-    ids: HashSet<HandId>
+    ids: HashSet<HandId>,
+    authority: Authority
 }
 
 impl PlayerArea {
-    pub fn new(scout: CardRef, viper: CardRef) -> PlayerArea {
+    pub fn new(scout: CardRef, viper: CardRef, starting_health: Authority) -> PlayerArea {
         let mut pa = PlayerArea {
             hand: IdCardCollection::new(SimpleStack::empty(), &HashSet::new()),
             table: IdCardCollection::new(SimpleStack::empty(), &HashSet::new()),
-            turn_data: TurnData {
-                to_be_scrapped: HashSet::new(),
-                to_be_discarded: HashSet::new(),
-                played_this_turn: HashSet::new()
-            },
+            turn_data: TurnData::new(),
             deck: {
                 let mut stack = SimpleStack::empty();
                 for _ in 0..8 {
@@ -139,7 +142,8 @@ impl PlayerArea {
             },
             discard: SimpleStack::empty(),
             current_goods: Goods::none(),
-            ids: HashSet::new()
+            ids: HashSet::new(),
+            authority: starting_health
         };
         if let Fail(msg) = pa.draw_cards_into_hand(5) {
             println!("DEV WARNING: {}", msg);
@@ -178,6 +182,7 @@ impl PlayerArea {
                      will_discard: bool,
                      played_this_turn: bool
     ) -> ActiveCard {
+        self.update_ids();
         let mut id = 0;
         while self.ids.contains(&id) {
             id += 1;
@@ -191,6 +196,17 @@ impl PlayerArea {
         }
     }
 
+    fn update_ids(&mut self) {
+        let mut ids = HashSet::new();
+        for id in self.hand.get_ids() {
+            ids.insert(id);
+        }
+        for id in self.table.get_ids() {
+            ids.insert(id);
+        }
+        self.ids = ids;
+    }
+
     pub fn draw_cards_into_hand(&mut self, num: usize) -> Failure<String> {
         for i in 0..num {
             if let Fail(_) = self.draw_card_into_hand() {
@@ -199,6 +215,16 @@ impl PlayerArea {
         }
         Succeed
     }
+
+    pub fn deal_damage(&mut self, damage: Authority) -> bool {
+        if damage >= self.authority {
+            self.authority = 0;
+            true
+        } else {
+            self.authority -= self.authority;
+            false
+        }
+    }
 }
 
 impl GameState {
@@ -206,12 +232,12 @@ impl GameState {
     /// If there is no scout or viper (because CardLibrary can only be created using them)
     /// ## Other
     /// this is helpful https://www.starrealms.com/sets-and-expansions/
-    pub fn new (card_library: Rc<CardLibrary>) -> GameState {
+    pub fn new (card_library: Rc<CardLibrary>, starting_health: Authority) -> GameState {
         let scout = card_library.get_scout().expect("card library needs a scout!");
         let viper = card_library.get_viper().expect("card library needs a viper!");
         let mut gs = GameState {
-            player1: PlayerArea::new(Rc::clone(&scout), Rc::clone(&viper)),
-            player2: PlayerArea::new(Rc::clone(&scout), Rc::clone(&viper)),
+            player1: PlayerArea::new(Rc::clone(&scout), Rc::clone(&viper), starting_health),
+            player2: PlayerArea::new(Rc::clone(&scout), Rc::clone(&viper), starting_health),
             current_player: Player::Player1,
             trade_row: SimpleStack::empty(),
             explorers: 10,
@@ -330,7 +356,7 @@ impl GameState {
     }
 
     pub fn advance<T: Client>(&mut self, receivers: Vec<&T>) {
-        let current = self.get_current_player_mut();
+        // let current = self.get_current_player_mut();
 
         // Turn layout:
         // (should have up to 5 cards in hand)
@@ -338,15 +364,77 @@ impl GameState {
         //  - keep a running sum of damage (combat)
 
         // 2. deal damage to the opponent
+        {
+            let current_combat = self.get_current_player().turn_data.total_combat;
+            let opponent = self.get_current_opponent_mut();
+            let min_defense = opponent.table.cards.iter().filter_map(
+                |ac|
+                    if let Some(Outpost(defense)) = ac.card.base {
+                        Some(defense)
+                    } else {
+                        None
+                    }
+            ).min();
+            if let Some(d) = min_defense {
+                receivers.iter().for_each(|r| {
+                    // let choice = r.alert(format!(""))
+                })
+            } else {
+                let dead = opponent.deal_damage(current_combat);
+                if dead {
+                    receivers.iter()
+                        .for_each(|r| {
+                            // tell both players that the game is over,
+                            // and give them the option to quit, or ... quit.
+                            let message = format!(
+                                "Game is over! {:?} defeated {:?}",
+                                self.current_player,
+                                self.current_player.reverse(),
+                            );
+                            let message = message.as_str();
+                            let options = Some(vec![("Quit", true)]);
+
+                            let res = r.alert(
+                                &hashmap!{
+                                    self.current_player => message,
+                                    self.current_player.reverse() => message
+                                },
+                                &hashmap!{
+                                    self.current_player => options.clone(),
+                                    self.current_player.reverse() => options
+                                }
+                            );
+                            if let Some(x) = res {
+                                let x = r.alert::<()>(
+                                    {
+                                        let msg = "Quitting the game.";
+                                        &hashmap! {
+                                            self.current_player => msg,
+                                            self.current_player.reverse() => msg
+                                        }
+                                    },
+                                    &hashmap! {
+                                        self.current_player => None,
+                                        self.current_player.reverse() => None
+                                    }
+                                );
+                            }
+                        })
+                }
+            }
+        }
         // 3. discard all cards in hand
         //  - discard all cards scheduled to be discarded
         //  - scrap all cards scheduled to be scrapped
         // current.hand.move_all_to(&mut current.discard);
-        move_all_to(&mut current.hand, &mut current.discard);
-
+        {
+            let mut current = self.get_current_player_mut();
+            move_all_to(&mut current.hand, &mut current.discard);
+        }
         // 4. draw 5 cards into hand
-        current.draw_cards_into_hand(5);
-
+        {
+            self.get_current_player_mut().draw_cards_into_hand(5);
+        }
     }
 
 }

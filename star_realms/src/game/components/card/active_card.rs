@@ -15,6 +15,7 @@ pub struct ActiveCard {
     pub played_this_turn: bool
 }
 
+///
 pub struct IdCardCollection {
     pub cards: SimpleStack<ActiveCard>,
     ids: HashMap<HandId, usize>,
