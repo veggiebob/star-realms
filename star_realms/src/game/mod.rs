@@ -7,12 +7,12 @@ use std::rc::Rc;
 use components::card::active_card::IdCardCollection;
 use components::stack::SimpleStack;
 
-use crate::game::actions::client_comms::{Client, ClientActionOptionQuery, ClientQuery};
+use crate::game::actions::client_comms::{Client, ClientActionOptionQuery, ClientQuery, TextStyle, StyledText};
 use crate::game::card_library::CardLibrary;
 use crate::game::components::{Authority, Coin, Combat, Goods};
 use crate::game::components::card::{Card, CardRef};
 use crate::game::components::card::active_card::ActiveCard;
-use crate::game::components::card::details::CardSource;
+use crate::game::components::card::details::{CardSource, Action};
 use crate::game::RelativePlayer::{Current, Opponent};
 use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
@@ -355,18 +355,57 @@ impl GameState {
         !self.turn_is_player1()
     }
 
-    pub fn advance<T: Client>(&mut self, receivers: Vec<&T>) {
-        // let current = self.get_current_player_mut();
+    pub fn advance<T: Client>(&mut self, client: &T) {
+        // not sure why I decided to put multiple receivers
+
+        // notes: each part of this function (there are 4) should
+        //   be able to be completed entirely within that scope (esp. #1), and it should
+        //   only exit prematurely if it encounters a *very* fatal error
 
         // Turn layout:
         // (should have up to 5 cards in hand)
         // 1. take any of the actions on any of the cards, provided that it is able
         //  - keep a running sum of damage (combat)
+        {
+            // gather the plays
+            let cards = &self.get_current_player().hand;
+            let mut plays = vec![];
+            for card_data in <IdCardCollection as Stack<ActiveCard>>::iter(&cards) {
+                let card: &ActiveCard = card_data; // autocomplete
+                if let Some(playset) = &card.card.content {
+                    for play in playset.iter() {
+                        plays.push(play);
+                    }
+                }
+            }
+
+
+            // print the options to the player
+            let mut plays_string = vec![];
+            for play in plays.iter() {
+                plays_string.push(
+                    play.actn.name.clone()
+                )
+            }
+            let msg = format!("There are {} plays available:\n{}", plays.len(), plays_string.concat());
+            client.alert::<()>(
+            &hashmap! {
+                    self.current_player => &*msg
+                },
+                &GameState::all_players(None),
+                TextStyle::plain()
+            );
+
+
+
+        }
 
         // 2. deal damage to the opponent
         {
             let current_combat = self.get_current_player().turn_data.total_combat;
             let opponent = self.get_current_opponent_mut();
+
+            // calculate the outpost with the least defense (if there is one)
             let min_defense = opponent.table.cards.iter().filter_map(
                 |ac|
                     if let Some(Outpost(defense)) = ac.card.base {
@@ -375,54 +414,60 @@ impl GameState {
                         None
                     }
             ).min();
+            // if there is an outpost, and using the outpost with the minimum defense
             if let Some(d) = min_defense {
-                receivers.iter().for_each(|r| {
-                    // let choice = r.alert(format!(""))
-                })
+                if self.get_current_player().turn_data.total_combat < d {
+                    // if the amount of combat is less than the defense of
+                    // the lowest outpost, the player can't do any damage
+                    GameState::broadcast_message(
+                        client,
+                        format!(
+                            "No damage could be done. {} < {}",
+                            self.get_current_player().turn_data.total_combat,
+                            d,
+                        ).into()
+                    );
+                } else {
+                    // todo: choose which things to destroy
+                }
             } else {
                 let dead = opponent.deal_damage(current_combat);
                 if dead {
-                    receivers.iter()
-                        .for_each(|r| {
-                            // tell both players that the game is over,
-                            // and give them the option to quit, or ... quit.
-                            let message = format!(
-                                "Game is over! {:?} defeated {:?}",
-                                self.current_player,
-                                self.current_player.reverse(),
-                            );
-                            let message = message.as_str();
-                            let options = Some(vec![("Quit", true)]);
+                    // tell both players that the game is over,
+                    // and give them the option to quit, or ... quit.
+                    let message = format!(
+                        "Game is over! {:?} defeated {:?}",
+                        self.current_player,
+                        self.current_player.reverse(),
+                    );
+                    let message = message.as_str();
+                    let options = Some(vec![("Ok", true)]);
 
-                            let res = r.alert(
-                                &hashmap!{
-                                    self.current_player => message,
-                                    self.current_player.reverse() => message
-                                },
-                                &hashmap!{
-                                    self.current_player => options.clone(),
-                                    self.current_player.reverse() => options
+                    let res = client.alert(
+                        &GameState::all_players(message),
+                        &GameState::all_players(options),
+                        TextStyle::attention()
+                    );
+                    if let Some(x) = res {
+                        let x = client.alert::<()>(
+                            {
+                                let msg = "Quitting the game.";
+                                &hashmap! {
+                                    self.current_player => msg,
+                                    self.current_player.reverse() => msg
                                 }
-                            );
-                            if let Some(x) = res {
-                                let x = r.alert::<()>(
-                                    {
-                                        let msg = "Quitting the game.";
-                                        &hashmap! {
-                                            self.current_player => msg,
-                                            self.current_player.reverse() => msg
-                                        }
-                                    },
-                                    &hashmap! {
-                                        self.current_player => None,
-                                        self.current_player.reverse() => None
-                                    }
-                                );
-                            }
-                        })
+                            },
+                            &hashmap! {
+                                self.current_player => None,
+                                self.current_player.reverse() => None
+                            },
+                            TextStyle::plain()
+                        );
+                    }
                 }
             }
         }
+
         // 3. discard all cards in hand
         //  - discard all cards scheduled to be discarded
         //  - scrap all cards scheduled to be scrapped
@@ -431,10 +476,25 @@ impl GameState {
             let mut current = self.get_current_player_mut();
             move_all_to(&mut current.hand, &mut current.discard);
         }
+
         // 4. draw 5 cards into hand
         {
             self.get_current_player_mut().draw_cards_into_hand(5);
         }
+    }
+
+    fn all_players<T: Clone>(item: T) -> HashMap<Player, T> {
+        hashmap!{
+            Player::Player1 => item.clone(),
+            Player::Player2 => item
+        }
+    }
+
+    fn broadcast_message<C: Client>(client: &C, message: StyledText) {
+        client.alert::<()>(
+            &GameState::all_players(message.text.as_str()),
+            &GameState::all_players(None),
+            message.style);
     }
 
 }

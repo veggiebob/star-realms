@@ -36,7 +36,7 @@ pub fn scrap_card(sources: HashSet<CardSource>) -> Actionable {
     for source in sources {
         joined.push(ClientActionOptionQuery::CardSelection(source));
     }
-    Actionable::new(Join::choose(joined), |game, config| {
+    Actionable::new(Join::disjoint(joined), |game, config| {
         let cfg = config.ok_or_else(|| CONFIG_REQUIRED.to_string())?;
 
         if let ClientActionOptionResponse::CardSelection(source, index) = cfg {
@@ -55,7 +55,8 @@ pub fn scrap_card(sources: HashSet<CardSource>) -> Actionable {
     })
 }
 
-/// "put the next ship or base you acquire this turn into your "[destination]"
+/// "put the next [Join<[ship, base]>] you acquire this turn into your "[destination]"
+// add a trigger to the game
 pub fn specially_place_next_acquired(destination: CardSource) -> Actionable {
     todo!()
 }

@@ -20,7 +20,7 @@ mod tests {
     use crate::game::components::faction::Faction;
     use crate::game::components::Goods;
     use crate::game::components::stack::{SimpleStack, Stack};
-    use crate::game::util::Join;
+    use crate::game::util::{Join, Named};
     use crate::parse::{parse_card, parse_file, parse_goods};
     use crate::game::requirements::synergy;
 
@@ -102,12 +102,12 @@ card2:
             content: Some(vec![
                 Play {
                     cond: None,
-                    actn: Action::Unit(
-                        Join::choose(vec![
+                    actn: Named::of("Gain 1 trade or 3 authority", Action::Unit(
+                        Join::disjoint(vec![
                             add_goods(Goods { trade: 1, authority: 0, combat: 0 }),
                             add_goods(Goods { trade: 0, authority: 3, combat: 0 })
                         ])
-                    ),
+                    )),
                     exhaust: Exhaustibility::Once
                 },
                 Play {
@@ -118,7 +118,7 @@ card2:
                             )
                         )
                     ),
-                    actn: Action::Unit(Join::Unit(draw_card())),
+                    actn: Named::of("Draw card", Action::Unit(Join::Unit(draw_card()))),
                     exhaust: Exhaustibility::Once
                 }
             ])
@@ -136,21 +136,21 @@ card2:
             content: Some(vec![
                 Play {
                     cond: None,
-                    actn: Action::Unit(
-                        Join::Unit(add_goods(Goods::combat(5)))),
+                    actn: Named::of("5 combat", Action::Unit(
+                        Join::Unit(add_goods(Goods::combat(5))))),
                     exhaust: Exhaustibility::Once
                 },
                 Play {
                     cond: Some(Join::Unit(
                         Requirement::Cost(Sacrifice::Scrap(
                             1,
-                            Join::choose(vec![
+                            Join::disjoint(vec![
                                 CardSource::Discard(RelativePlayer::Current),
                                 CardSource::Hand(RelativePlayer::Current)
                             ])
                         ))
                     )),
-                    actn: Action::Unit(Join::Unit(draw_card())),
+                    actn: Named::of("Draw card", Action::Unit(Join::Unit(draw_card()))),
                     exhaust: Exhaustibility::UpTo(2)
                 }
             ])
@@ -168,17 +168,17 @@ card2:
             content: Some(vec![
                 Play {
                     cond: None,
-                    actn: Action::Unit(Join::all(vec![
+                    actn: Named::of("Gain 1 trade and scrap a card in hand or discard", Action::Unit(Join::union(vec![
                         add_goods(Goods::trade(1)),
                         scrap_card(
-                            vec![CardSource::Discard(RelativePlayer::Current), CardSource::Hand(RelativePlayer::Current)]
-                                .into_iter().collect())
-                    ])),
+                            hashset![CardSource::Discard(RelativePlayer::Current), CardSource::Hand(RelativePlayer::Current)]
+                        )
+                    ]))),
                     exhaust: Exhaustibility::Once
                 },
                 Play {
                     cond: Some(Join::Unit(synergy(Faction::Mech))),
-                    actn: Action::Unit(Join::Unit(add_goods(Goods::combat(2)))),
+                    actn: Named::of("Gain 2 combat", Action::Unit(Join::Unit(add_goods(Goods::combat(2))))),
                     exhaust: Exhaustibility::Once
                 }
             ])
@@ -192,20 +192,20 @@ card2:
             content: Some(vec![
                 Play {
                     cond: None,
-                    actn: Action::Unit(Join::all(vec![
+                    actn: Named::of("Draw card and gain 3 trade and 5 authority", Action::Unit(Join::union(vec![
                         add_goods(Goods { trade: 3, authority: 5, combat: 0 }),
                         draw_card()
-                    ])),
+                    ]))),
                     exhaust: Exhaustibility::Once
                 },
                 Play {
-                    cond: Some(Join::all(vec![
+                    cond: Some(Join::union(vec![
                         Requirement::Cost(Sacrifice::ScrapThis),
                         synergy(Faction::Fed)
                     ])),
-                    actn: Action::Unit(Join::Unit(
+                    actn: Named::of("Place the next card acquired in your hand", Action::Unit(Join::Unit(
                         specially_place_next_acquired(CardSource::Hand(RelativePlayer::Current))
-                    )),
+                    ))),
                     exhaust: Exhaustibility::Once
                 }
             ])
@@ -219,7 +219,7 @@ card2:
             content: Some(vec![
                 Play {
                     cond: None,
-                    actn: Action::Sequential(
+                    actn: Named::of("Draw a card, then discard a card", Action::Sequential(
                         Box::new(Join::Unit(
                             Action::Unit(Join::Unit(
                                 draw_card()
@@ -231,7 +231,7 @@ card2:
                                 todo!()
                             ))
                         ))
-                    ),
+                    )),
                     exhaust: Exhaustibility::Once
                 }
             ])
@@ -245,25 +245,21 @@ card2:
             content: Some(vec![
                 Play {
                     cond: None,
-                    actn: Action::Unit(Join::Unit(add_goods(Goods {
+                    actn: Named::of("Gain 1 trade, 2 combat, and 3 authority", Action::Unit(Join::Unit(add_goods(Goods {
                         authority: 3,
                         combat: 2,
                         trade: 1
-                    }))),
+                    })))),
                     exhaust: Exhaustibility::Once
                 },
                 Play {
-                    cond: Some(Join::all(vec![
+                    cond: Some(Join::union(vec![
                         synergy(Faction::Fed),
                         Requirement::Cost(Sacrifice::ScrapThis)
                     ])),
-                    actn: Action::Unit(Join::Unit(
-                        Actionable::no_args(|game, _| {
-                            // add a trigger to the game
-                            // "Put the next ship you acquire this turn on top of your deck"
-                            todo!()
-                        })
-                    )),
+                    actn: Named::of("", Action::Unit(Join::Unit(
+                        specially_place_next_acquired(CardSource::Deck(RelativePlayer::Current))
+                    ))),
                     exhaust: Exhaustibility::Once
                 }
             ])
@@ -282,8 +278,8 @@ card2:
     fn join_playground() {
         let joined = Join::Unit(5);
         let v = vec![1, 2, 3, 4, 5];
-        let joined_2 = Join::all(v);
-        println!("{:?}", if let Join::All(xs) = joined_2 {
+        let joined_2 = Join::union(v);
+        println!("{:?}", if let Join::Union(xs) = joined_2 {
             xs
         } else {
             vec![]

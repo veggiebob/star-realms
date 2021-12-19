@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Formatter, Display};
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -7,7 +7,7 @@ use crate::game::actions::client_comms::{ClientActionOptionQuery, ClientActionOp
 use crate::game::components::Defense;
 use crate::game::components::Goods;
 use crate::game::{GameState, RelativePlayer};
-use crate::game::util::{Failure, Join};
+use crate::game::util::{Failure, Join, Named};
 
 /// number type for counting cards
 pub type CardSizeT = u32;
@@ -24,7 +24,7 @@ pub struct Play {
     pub cond: Option<Join<Requirement>>,
 
     /// the action of this play (either sequential or unit)
-    pub actn: Action,
+    pub actn: Named<Action>,
 
     /// how many times this play can be executed per turn
     pub exhaust: Exhaustibility
@@ -99,9 +99,13 @@ type ActionFunc = dyn FnMut(&mut GameState, ActionConfig) -> ActionResult;
 type ActionConfig = Option<ClientActionOptionResponse>;
 type ActionResult = Result<(), String>;
 
+/// Describes the processes associated with certain actions described on cards.
 #[derive(Debug, Clone)]
 pub enum Action {
+    /// One action, then another. Note the flexible, recursive design.
     Sequential(Box<Join<Action>>, Box<Join<Action>>),
+
+    /// Simple description of the actionable.
     Unit(Join<Actionable>)
 }
 
