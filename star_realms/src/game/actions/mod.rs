@@ -40,7 +40,7 @@ pub fn scrap_card(sources: HashSet<CardSource>) -> Actionable {
         let cfg = config.ok_or_else(|| CONFIG_REQUIRED.to_string())?;
 
         if let ClientActionOptionResponse::CardSelection(source, index) = cfg {
-            let mut stack = game.get_stack_mut(source);
+            let mut stack = game.get_mut_stack(source);
             match stack.remove(index as usize) {
                 None => Err(format!("Accessing {:?} at index {} is out of bounds", source, index)),
                 Some(card) => {

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use crate::game::components::card::details::{CardSizeT, CardSource};
-use crate::game::Player;
+use crate::game::{Player, GameState};
 use crate::game::components::card::CardRef;
 
 /// Query descriptors that require the client to get data from the user.
@@ -14,6 +14,11 @@ pub enum ClientActionOptionQuery {
     /// Requires the user to choose a card from the source
     /// Expected response: CardSelection
     CardSelection(CardSource),
+
+    /// Select a play from the list
+    /// (outer list lining up with the stack of cards, inner list is plays attached to that card)
+    /// Expected response: PlaySelection
+    PlaySelection(Vec<Vec<String>>)
 }
 
 /// represents a filter for cards (returning true = fits the restriction)
@@ -22,7 +27,11 @@ pub struct Restriction(Box<dyn Fn(CardRef) -> bool>);
 #[derive(Debug)]
 pub enum ClientActionOptionResponse {
     /// the card chosen from the source, the index given
-    CardSelection(CardSource, CardSizeT)
+    CardSelection(CardSource, CardSizeT),
+
+    /// the card index and play index selected from the choices.
+    /// return None if there were no play choices
+    PlaySelection(Option<(CardSizeT, CardSizeT)>)
 }
 
 /// umbrella query that the client receives
@@ -76,11 +85,12 @@ impl TextStyle {
 }
 
 pub trait Client {
-    /// function that should be able to answer these "action requests"
-    /// that are configuration for an action
-    fn resolve_action_query(&mut self, query: ClientQuery) -> ClientActionOptionResponse;
+    /// Function that should be able to answer these "action requests".
+    /// That are configuration for an action.
+    fn resolve_action_query(&mut self, query: ClientQuery, game: &GameState) -> ClientActionOptionResponse;
 
-    /// a generic way to send messages in text format to the client
+    /// A generic way to send messages and alerts in text format to the client.
+    /// These would show up either as log output (if passive) or a pop-up dialog box in a GUI game
     fn alert<'a, T: Eq>(&self,
                 message: &HashMap<Player, &str>,
                 interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>,

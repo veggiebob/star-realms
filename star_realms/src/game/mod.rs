@@ -18,7 +18,7 @@ use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
 use crate::game::components::stack::{Stack, move_all_to};
 use crate::game::components::card::details::Base::Outpost;
-use crate::game::components::card::in_game::ActivePlay;
+use crate::game::components::card::in_game::{ActivePlay, Trigger};
 
 pub mod components;
 pub mod card_library;
@@ -27,32 +27,26 @@ pub mod actions;
 pub mod requirements;
 
 type CardStack = SimpleStack<CardRef>;
-pub type HandId = u32;
 
 #[derive(Debug)]
 pub struct TurnData {
-    to_be_scrapped: HashSet<HandId>,
-    to_be_discarded: HashSet<HandId>,
-    played_this_turn: HashSet<HandId>,
     total_combat: Combat,
-    money: Coin
+    money: Coin,
+    triggers: Vec<Trigger>
 }
 
 impl TurnData {
     pub fn new() -> TurnData {
         TurnData {
-            to_be_scrapped: HashSet::new(),
-            to_be_discarded: HashSet::new(),
-            played_this_turn: HashSet::new(),
             total_combat: 0,
-            money: 0
+            money: 0,
+            triggers: vec![]
         }
     }
     pub fn reset(&mut self)  {
-        self.to_be_discarded = HashSet::new();
-        self.to_be_scrapped = HashSet::new();
-        self.played_this_turn = HashSet::new();
         self.total_combat = 0;
+        self.triggers = vec![];
+        self.money = 0;
     }
 }
 
@@ -120,15 +114,14 @@ pub struct PlayerArea {
     deck: CardStack,
     discard: CardStack,
     current_goods: Goods,
-    ids: HashSet<HandId>,
     authority: Authority
 }
 
 impl PlayerArea {
     pub fn new(scout: CardRef, viper: CardRef, starting_health: Authority) -> PlayerArea {
         let mut pa = PlayerArea {
-            hand: IdCardCollection::new(SimpleStack::empty(), &HashSet::new()),
-            table: IdCardCollection::new(SimpleStack::empty(), &HashSet::new()),
+            hand: IdCardCollection::new(SimpleStack::empty()),
+            table: IdCardCollection::new(SimpleStack::empty()),
             turn_data: TurnData::new(),
             deck: {
                 let mut stack = SimpleStack::empty();
@@ -143,7 +136,6 @@ impl PlayerArea {
             },
             discard: SimpleStack::empty(),
             current_goods: Goods::none(),
-            ids: HashSet::new(),
             authority: starting_health
         };
         if let Fail(msg) = pa.draw_cards_into_hand(5) {
@@ -183,29 +175,11 @@ impl PlayerArea {
                      will_discard: bool,
                      played_this_turn: bool
     ) -> ActiveCard {
-        self.update_ids();
-        let mut id = 0;
-        while self.ids.contains(&id) {
-            id += 1;
-        }
-        self.ids.insert(id);
         ActiveCard {
-            id,
             card,
             will_discard,
             played_this_turn,
         }
-    }
-
-    fn update_ids(&mut self) {
-        let mut ids = HashSet::new();
-        for id in self.hand.get_ids() {
-            ids.insert(id);
-        }
-        for id in self.table.get_ids() {
-            ids.insert(id);
-        }
-        self.ids = ids;
     }
 
     pub fn draw_cards_into_hand(&mut self, num: usize) -> Failure<String> {
@@ -222,7 +196,7 @@ impl PlayerArea {
             self.authority = 0;
             true
         } else {
-            self.authority -= self.authority;
+            self.authority -= damage;
             false
         }
     }
@@ -267,7 +241,7 @@ impl GameState {
 
     /// ids: the indices of the cards to be removed
     pub fn remove_cards_from_trade_row(&mut self, ids: HashSet<u32>) -> HashSet<CardRef> {
-        let mut ids: Vec<_> = ids.iter().collect();
+        let mut ids: Vec<_> = ids.iter().filter(|&&i| (i as usize) < self.trade_row.len()).collect();
         ids.sort();
         ids.reverse(); // remove them from biggest to smallest to prevent shifting
         let mut cards = HashSet::new();
@@ -279,7 +253,29 @@ impl GameState {
         cards
     }
 
-    pub fn get_stack_mut(&mut self, card_source: CardSource) -> &mut dyn Stack<CardRef> {
+    pub fn get_stack(&self, card_source: CardSource) -> &dyn Stack<CardRef> {
+        match card_source {
+            CardSource::Deck(player) => match player {
+                Current => &self.get_current_player().deck,
+                Opponent => &self.get_current_opponent().deck
+            },
+            CardSource::Discard(player) => match player {
+                Current => &self.get_current_player().discard,
+                Opponent => &self.get_current_opponent().discard
+            },
+            CardSource::Hand(player) => match player {
+                Current => &self.get_current_player().hand,
+                Opponent => &self.get_current_opponent().hand
+            },
+            CardSource::Table(player) => match player {
+                Current => &self.get_current_player().table,
+                Opponent => &self.get_current_opponent().table
+            },
+            CardSource::TradeRow => &self.trade_row
+        }
+    }
+
+    pub fn get_mut_stack(&mut self, card_source: CardSource) -> &mut dyn Stack<CardRef> {
         match card_source {
             CardSource::Deck(player) => match player {
                 Current => &mut self.get_current_player_mut().deck,
@@ -292,6 +288,10 @@ impl GameState {
             CardSource::Hand(player) => match player {
                 Current => &mut self.get_current_player_mut().hand,
                 Opponent => &mut self.get_current_opponent_mut().hand
+            },
+            CardSource::Table(player) => match player {
+                Current => &mut self.get_current_player_mut().table,
+                Opponent => &mut self.get_current_opponent_mut().table
             },
             CardSource::TradeRow => &mut self.trade_row
         }
@@ -356,7 +356,7 @@ impl GameState {
         !self.turn_is_player1()
     }
 
-    pub fn advance<T: Client>(&mut self, client: &T) {
+    pub fn advance<T: Client>(&mut self, client: &mut T) {
         // not sure why I decided to put multiple receivers
 
         // notes: each part of this function (there are 5) should
@@ -370,39 +370,35 @@ impl GameState {
         {
             // gather the plays
             let cards = &self.get_current_player().hand;
-            let mut plays = vec![];
+            let mut plays = hashmap!{};
+            let mut idx: u32 = 0;
             for card_data in <IdCardCollection as Stack<ActiveCard>>::iter(&cards) {
                 let card: &ActiveCard = card_data; // for the sake of autocomplete
                 if let Some(playset) = &card.card.content {
+                    if !plays.contains_key(&idx) {
+                        plays.insert(idx, vec![]);
+                    }
                     for play in playset.iter() {
-                        plays.push(ActivePlay::new(play));
+                        plays.get_mut(&idx).unwrap().push(ActivePlay::new(play));
                     }
                 }
-            }
-
-
-            // print the options to the player
-            let mut plays_string = vec![];
-            let mut idx = 0;
-            for play in plays.iter() {
-                plays_string.push(
-                    format!("{}. {}\n",
-                        idx,
-                        play.play.actn.name.clone()
-                    )
-                );
                 idx += 1;
             }
 
-            // this section is unfinished, and needs revision
-            let msg = format!("There are {} plays available:\n{}", plays.len(), plays_string.concat());
-            client.alert::<()>(
-            &hashmap! {
-                    self.current_player => &*msg
-                },
-                &GameState::all_players(None),
-                TextStyle::plain()
-            );
+            let mut plays = {
+                let mut tmp: Vec<_> = (0..idx).into_iter().map(|_| vec![]).collect();
+                for (idx, v) in plays.iter() {
+                    v.into_iter().map(|p| p.play.actn.name.clone()).for_each(|n|
+                        tmp.get_mut(*idx as usize).unwrap().push(n)
+                    );
+                }
+                tmp
+            };
+            client.resolve_action_query(ClientQuery {
+                action_query: ClientActionOptionQuery::PlaySelection(plays),
+                performer: self.current_player
+            }, &self);
+
         }
 
         // 2. deal damage to the opponent
@@ -454,7 +450,7 @@ impl GameState {
                         &GameState::all_players(options),
                         TextStyle::attention()
                     );
-                    if let Some(x) = res {
+                    if res.is_some() {
                         let x = client.alert::<()>(
                             {
                                 let msg = "Quitting the game.";

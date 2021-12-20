@@ -4,9 +4,10 @@ use std::str::FromStr;
 
 use ansi_term::Color;
 use star_realms::game::{AbstractPlayerAction, Feedback, GameState, RelativePlayer, UserActionIntent, Player};
-use star_realms::game::actions::client_comms::{Client, ClientQuery, ClientActionOptionResponse, TextStyle};
+use star_realms::game::actions::client_comms::{Client, ClientQuery, ClientActionOptionResponse, TextStyle, ClientActionOptionQuery};
 use star_realms::game::components::card::details::CardSource;
 use std::fmt::Display;
+use star_realms::game::components::card::active_card::IdCardCollection;
 
 pub struct ClientPTUI {
     pub name: String
@@ -28,11 +29,73 @@ impl ClientPTUI {
 }
 
 impl Client for ClientPTUI {
-    fn resolve_action_query(&mut self, query: ClientQuery) -> ClientActionOptionResponse {
-        println!("received a query, for user {:?}", query.performer);
-        println!("The query is {:?}", query.action_query);
-        println!("Since this is stubbed, returning a bad response");
-        ClientActionOptionResponse::CardSelection(CardSource::Deck(RelativePlayer::Current), 0) // idk this is not accurate
+    fn resolve_action_query(&mut self, query: ClientQuery, game: &GameState) -> ClientActionOptionResponse {
+        // Resolve Relative Player
+        let rrp = |p| match p {
+            RelativePlayer::Current => query.performer,
+            RelativePlayer::Opponent => query.performer.reverse()
+        };
+        match query.action_query {
+            ClientActionOptionQuery::PlaySelection(card_plays) => {
+                let num_cards = card_plays.len();
+                let mut idx = 0;
+                for card in card_plays.iter() {
+                    let mut px = 0;
+                    if card.len() > 0 {
+                        println!("{}", ClientPTUI::p_colored(
+                            &query.performer,
+                            format!("Plays in card {}:", px)
+                        ));
+                        for play in card {
+                            println!("   {}", ClientPTUI::p_colored(
+                                &query.performer,
+                                format!("{}. {}", px, play)
+                            ));
+                            px += 1;
+                        }
+                    }
+                    idx += 1;
+                }
+                if num_cards == 0 {
+                    println!("{}", ClientPTUI::p_colored(&query.performer,
+                             "Sorry, but there's no more plays left! Guess you'll have to end your turn"));
+                    ClientActionOptionResponse::PlaySelection(None)
+                } else {
+                    println!("{}", ClientPTUI::p_colored(&query.performer, format!("Enter a card index (0-{}):", num_cards - 1)));
+                    let card_index: usize = get_value_input(|id| *id < num_cards);
+                    println!("{}", ClientPTUI::p_colored(&query.performer, "Enter a play index:"));
+                    let card = card_plays.get(card_index).unwrap();
+                    let play_index: usize = get_value_input(|idx| *idx < card.len());
+                    ClientActionOptionResponse::PlaySelection(Some((card_index as u32, play_index as u32)))
+                }
+            }
+            ClientActionOptionQuery::CardSelection(source) => {
+                let stack = game.get_stack(source);
+                println!("{}", ClientPTUI::p_colored(&query.performer, "Select a card."));
+                println!("{}", ClientPTUI::p_colored(&query.performer,
+                    format!("There are {} cards in this stack. Would you like to see them? (y/n): ", stack.len())));
+                let see_more = ensure(
+                    input,
+                    |i| match i.as_str() {
+                        "y" | "Y" => Ok(true),
+                        "n" | "N" => Ok(false),
+                        _ => Err(())
+                    },
+                    |_| true,
+                    |_| println!("{}", ClientPTUI::p_colored(&query.performer, "Must be 'y' or 'n'")),
+                    |_| println!("{}", ClientPTUI::p_colored(&query.performer, "Must be 'y' or 'n'"))
+                );
+                if see_more {
+                    let mut idx = 0;
+                    for card in stack.iter() {
+                        println!("{}", ClientPTUI::p_colored(&query.performer, format!("{}. {}", idx, card.name)));
+                        idx += 1;
+                    }
+                }
+                let index = get_value_input(|idx| (*idx as usize) < stack.len());
+                ClientActionOptionResponse::CardSelection(source, index)
+            }
+        }
     }
 
     fn alert<'a, T: Eq>(&self, message: &HashMap<Player, &str>, interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>, style: TextStyle) -> Option<&'a T> {

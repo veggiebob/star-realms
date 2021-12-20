@@ -20,3 +20,6 @@ impl ActivePlay<'_> {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct Trigger();

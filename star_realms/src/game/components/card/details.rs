@@ -65,6 +65,7 @@ pub enum Sacrifice {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum CardSource {
     Hand(RelativePlayer),
+    Table(RelativePlayer),
     Discard(RelativePlayer),
     Deck(RelativePlayer),
     TradeRow

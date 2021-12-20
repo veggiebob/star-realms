@@ -20,16 +20,16 @@ pub mod main {
         println!("{}", Color::Red.paint("***** ***** RUNNING IN DEBUG MODE ***** *****"));
         let cards = get_debug_cards();
         let misc_cards = get_misc_cards();
-        let mut cl = Rc::new(match CardLibrary::new(cards, misc_cards) {
+        let cl = Rc::new(match CardLibrary::new(cards, misc_cards) {
             Ok(cl) => cl,
             Err(e) => panic!("Unable to create Card Library. {}", Color::Red.paint(e))
         });
         let mut game = GameState::new(cl, 80);
-        let client = ClientPTUI {
+        let mut client = ClientPTUI {
             name: "debug user!".to_string()
         };
         loop {
-            game.advance(&client);
+            game.advance(&mut client);
         }
         println!("cl_client::main::debug: Game has ended!");
     }

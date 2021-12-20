@@ -5,11 +5,15 @@ use std::collections::HashSet;
 pub trait Stack<Item> {
     fn len(&self) -> usize;
     fn get(&self, index: usize) -> Option<&Item>;
-    fn iter(&self) -> Iter<'_, Item>;
+    fn iter(&self) -> Box<dyn Iterator<Item=&Item> + '_>;
     fn add(&mut self, item: Item);
     fn remove(&mut self, index: usize) -> Option<Item>;
     fn draw(&mut self) -> Option<Item> {
-        self.remove(self.len() - 1)
+        if self.len() == 0 {
+            None
+        } else {
+            self.remove(self.len() - 1)
+        }
     }
     fn peek(&self) -> Option<&Item> {
         self.get(self.len() - 1)
@@ -93,8 +97,8 @@ impl<T> Stack<T> for SimpleStack<T> {
     //     }
     // }
 
-    fn iter(&self) -> Iter<'_, T> {
-        self.elements.iter()
+    fn iter(&self) -> Box<dyn Iterator<Item=&T> + '_> {
+        Box::new(self.elements.iter())
     }
 }
 
