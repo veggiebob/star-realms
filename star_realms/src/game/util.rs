@@ -34,6 +34,12 @@ pub enum Join<T: Clone> {
     Disjoint(Vec<Box<Join<T>>>)
 }
 
+impl<T: Clone> From<T> for Join<T> {
+    fn from(x: T) -> Self {
+        Join::Unit(x)
+    }
+}
+
 impl<T: Display + Clone> Display for Join<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

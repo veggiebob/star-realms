@@ -30,11 +30,12 @@ pub struct Play {
     pub exhaust: Exhaustibility
 }
 
+pub type ExhaustionLevel = u32;
 #[derive(Debug, Clone)]
 pub enum Exhaustibility {
     Once,
-    UpTo(u32),
-    Exactly(u32)
+    UpTo(ExhaustionLevel),
+    Exactly(ExhaustionLevel)
 }
 
 #[derive(Clone)]
@@ -134,6 +135,12 @@ impl Base {
             Base::Outpost(_) => true,
             _ => false
         }
+    }
+}
+
+impl From<Actionable> for Action {
+    fn from(x: Actionable) -> Self {
+        Action::Unit(x.into())
     }
 }
 

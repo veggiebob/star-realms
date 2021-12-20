@@ -18,6 +18,7 @@ use crate::game::util::Failure;
 use crate::game::util::Failure::{Fail, Succeed};
 use crate::game::components::stack::{Stack, move_all_to};
 use crate::game::components::card::details::Base::Outpost;
+use crate::game::components::card::in_game::ActivePlay;
 
 pub mod components;
 pub mod card_library;
@@ -358,7 +359,7 @@ impl GameState {
     pub fn advance<T: Client>(&mut self, client: &T) {
         // not sure why I decided to put multiple receivers
 
-        // notes: each part of this function (there are 4) should
+        // notes: each part of this function (there are 5) should
         //   be able to be completed entirely within that scope (esp. #1), and it should
         //   only exit prematurely if it encounters a *very* fatal error
 
@@ -371,10 +372,10 @@ impl GameState {
             let cards = &self.get_current_player().hand;
             let mut plays = vec![];
             for card_data in <IdCardCollection as Stack<ActiveCard>>::iter(&cards) {
-                let card: &ActiveCard = card_data; // autocomplete
+                let card: &ActiveCard = card_data; // for the sake of autocomplete
                 if let Some(playset) = &card.card.content {
                     for play in playset.iter() {
-                        plays.push(play);
+                        plays.push(ActivePlay::new(play));
                     }
                 }
             }
@@ -382,11 +383,18 @@ impl GameState {
 
             // print the options to the player
             let mut plays_string = vec![];
+            let mut idx = 0;
             for play in plays.iter() {
                 plays_string.push(
-                    play.actn.name.clone()
-                )
+                    format!("{}. {}\n",
+                        idx,
+                        play.play.actn.name.clone()
+                    )
+                );
+                idx += 1;
             }
+
+            // this section is unfinished, and needs revision
             let msg = format!("There are {} plays available:\n{}", plays.len(), plays_string.concat());
             client.alert::<()>(
             &hashmap! {
@@ -395,9 +403,6 @@ impl GameState {
                 &GameState::all_players(None),
                 TextStyle::plain()
             );
-
-
-
         }
 
         // 2. deal damage to the opponent
@@ -441,7 +446,8 @@ impl GameState {
                         self.current_player.reverse(),
                     );
                     let message = message.as_str();
-                    let options = Some(vec![("Ok", true)]);
+                    let op = true;
+                    let options = Some(vec![("Ok", &op)]);
 
                     let res = client.alert(
                         &GameState::all_players(message),
@@ -481,6 +487,9 @@ impl GameState {
         {
             self.get_current_player_mut().draw_cards_into_hand(5);
         }
+
+        // 5. flip turn
+        self.flip_turn();
     }
 
     fn all_players<T: Clone>(item: T) -> HashMap<Player, T> {

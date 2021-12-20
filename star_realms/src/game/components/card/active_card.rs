@@ -73,7 +73,11 @@ impl Stack<ActiveCard> for IdCardCollection {
     }
 
     fn add(&mut self, item: ActiveCard) {
-        let index = self.cards.len() - 1;
+        let index = if self.cards.len() == 0 {
+            0
+        } else {
+            self.cards.len() - 1
+        };
         self.ids.insert(item.id.clone(), index);
         self.indices.insert(index, item.id.clone());
         self.cards.add(item);

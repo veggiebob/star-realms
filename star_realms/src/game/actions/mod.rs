@@ -4,7 +4,7 @@ use client_comms::ClientActionOptionQuery;
 
 use crate::game::components::card::details::{Actionable, CardSource};
 use crate::game::components::Goods;
-use crate::game::GameState;
+use crate::game::{GameState, RelativePlayer};
 use crate::game::util::Failure::Succeed;
 use crate::game::util::Join;
 use crate::game::actions::client_comms::ClientActionOptionResponse;
@@ -58,5 +58,19 @@ pub fn scrap_card(sources: HashSet<CardSource>) -> Actionable {
 /// "put the next [Join<[ship, base]>] you acquire this turn into your "[destination]"
 // add a trigger to the game
 pub fn specially_place_next_acquired(destination: CardSource) -> Actionable {
-    todo!()
+    // todo: actually implement this
+    Actionable::new(Join::Unit(ClientActionOptionQuery::CardSelection(CardSource::TradeRow)), move |_, _| {
+        println!("running the specially_place_next_acquired() action!");
+        println!("putting the card in {:?}, but actually not!", destination);
+        Ok(())
+    })
+}
+
+pub fn discard_card() -> Actionable {
+    // todo: actually implement this
+    Actionable::new(Join::Unit(ClientActionOptionQuery::CardSelection(CardSource::Hand(RelativePlayer::Current))), move |_, _| {
+        println!("running the discard_card() action!");
+        println!("putting the card in discard pile, but actually not!");
+        Ok(())
+    })
 }

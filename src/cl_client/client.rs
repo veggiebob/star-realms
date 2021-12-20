@@ -3,16 +3,80 @@ use std::io;
 use std::str::FromStr;
 
 use ansi_term::Color;
-use star_realms::game::{AbstractPlayerAction, Feedback, GameState, RelativePlayer, UserActionIntent, UserActionSupplier};
-use star_realms::game::actions::client_comms::{Client, ClientQuery, ClientActionOptionResponse};
+use star_realms::game::{AbstractPlayerAction, Feedback, GameState, RelativePlayer, UserActionIntent, Player};
+use star_realms::game::actions::client_comms::{Client, ClientQuery, ClientActionOptionResponse, TextStyle};
+use star_realms::game::components::card::details::CardSource;
+use std::fmt::Display;
 
 pub struct ClientPTUI {
     pub name: String
 }
 
+impl ClientPTUI {
+    fn p1<T: Display>(msg: T) -> String {
+        format!("{}", Color::Blue.paint(format!("{}", msg)))
+    }
+    fn p2<T: Display>(msg: T) -> String {
+        format!("{}", Color::Purple.paint(format!("{}", msg)))
+    }
+    fn p_colored<T: Display>(player: &Player, msg: T) -> String {
+        match player {
+            Player::Player1 => format!("{}", ClientPTUI::p1(msg)),
+            Player::Player2 => format!("{}", ClientPTUI::p2(msg))
+        }
+    }
+}
+
 impl Client for ClientPTUI {
-    fn resolve_action_query(query: ClientQuery) -> ClientActionOptionResponse {
-        todo!()
+    fn resolve_action_query(&mut self, query: ClientQuery) -> ClientActionOptionResponse {
+        println!("received a query, for user {:?}", query.performer);
+        println!("The query is {:?}", query.action_query);
+        println!("Since this is stubbed, returning a bad response");
+        ClientActionOptionResponse::CardSelection(CardSource::Deck(RelativePlayer::Current), 0) // idk this is not accurate
+    }
+
+    fn alert<'a, T: Eq>(&self, message: &HashMap<Player, &str>, interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>, style: TextStyle) -> Option<&'a T> {
+        println!("alert received.");
+        for (player, msg) in message.iter() {
+            println!("{:?}, {}", player, ClientPTUI::p_colored(player, msg));
+        }
+        loop {
+            let mut responses = HashMap::new();
+            for (player, interrupt) in interrupt.iter() {
+                match interrupt {
+                    Some(options) => {
+                        println!("{:?}, {}", player,
+                                 ClientPTUI::p_colored(player, "Please select one of the following options using a number."));
+                        let mut idx: u32 = 0;
+                        for (desc, _) in options.iter() {
+                            println!("{}. {}", idx, desc);
+                            idx += 1;
+                        }
+                        let response: u32 = get_value_input(|u| *u < idx);
+                        let (_, response) = options.get(response as usize).unwrap();
+                        responses.insert(player, response);
+                    },
+                    None => {
+                        println!("{}", ClientPTUI::p_colored(player, "Ok?"));
+                    }
+                }
+            }
+            let r1 = responses.get(&Player::Player1);
+            let r2 = responses.get(&Player::Player2);
+            if r1.is_some() && r2.is_some() {
+                if r1.unwrap() != r2.unwrap() {
+                    println!("{}",
+                             Color::Red.paint("Player responses must match!"));
+                    continue;
+                } else {
+                    return Some(r1.unwrap())
+                }
+            } else if r1.is_none() && r2.is_none() {
+                return None
+            } else {
+                return r1.or_else(|| r2).map(|&&x| x);
+            }
+        }
     }
 }
 

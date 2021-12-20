@@ -26,7 +26,7 @@ pub mod main {
             name: "debug user!".to_string()
         };
         loop {
-            game.advance(vec![&client]);
+            game.advance(&client);
         }
         println!("cl_client::main::debug: Game has ended!");
     }

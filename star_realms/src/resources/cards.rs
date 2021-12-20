@@ -3,7 +3,7 @@ use crate::game::components::card::details::{Base, Play, Action, Exhaustibility,
 use crate::game::components::faction::Faction;
 use crate::game::util::{Join, Named};
 use std::collections::HashSet;
-use crate::game::actions::{add_goods, draw_card, specially_place_next_acquired, scrap_card};
+use crate::game::actions::{add_goods, draw_card, specially_place_next_acquired, scrap_card, discard_card};
 use crate::game::components::Goods;
 use crate::game::requirements::synergy;
 use crate::game::RelativePlayer;
@@ -31,7 +31,25 @@ pub fn get_misc_cards() -> Vec<Card> {
             content: Some(vec![
                 Play {
                     cond: None,
-                    actn: Named::of("Gain 1 combat", Action::Unit(Join::Unit(add_goods(Goods::combat(1))))),
+                    actn: Named::of("Gain 1 combat", add_goods(Goods::combat(1)).into()),
+                    exhaust: Exhaustibility::Once
+                }
+            ])
+        },
+        Card {
+            cost: 2,
+            base: None,
+            synergizes_with: hashset![],
+            name: "explorer".to_string(),
+            content: Some(vec![
+                Play {
+                    cond: None,
+                    actn: Named::of("Gain 2 trade", add_goods(Goods::trade(2)).into()),
+                    exhaust: Exhaustibility::Once
+                },
+                Play {
+                    cond: Some(Join::Unit(Requirement::Cost(Sacrifice::ScrapThis))),
+                    actn: Named::of("Gain 2 combat", add_goods(Goods::trade(2)).into()),
                     exhaust: Exhaustibility::Once
                 }
             ])
@@ -177,8 +195,7 @@ pub fn get_debug_cards() -> Vec<Card> {
                     )),
                     Box::new(Join::Unit(
                         Action::Unit(Join::Unit(
-                            // discard_card()
-                            todo!()
+                            discard_card()
                         ))
                     ))
                 )),

@@ -11,8 +11,17 @@ use crate::parse::parse_goods;
 use crate::game::components::card::details::PlaySet;
 use std::rc::Rc;
 
+
+/// card specifications (namely `PlaySet`)
 pub mod details;
+
+/// implementation for cards in play
 pub mod active_card;
+
+/// other details that describe in-game objects
+/// (such as state relating to description)
+pub mod in_game;
+
 pub type CardRef = Rc<Card>;
 
 #[derive(Debug)]

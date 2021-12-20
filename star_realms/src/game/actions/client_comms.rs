@@ -81,8 +81,8 @@ pub trait Client {
     fn resolve_action_query(&mut self, query: ClientQuery) -> ClientActionOptionResponse;
 
     /// a generic way to send messages in text format to the client
-    fn alert<T>(&self,
+    fn alert<'a, T: Eq>(&self,
                 message: &HashMap<Player, &str>,
-                interrupt: &HashMap<Player, Option<Vec<(&str, T)>>>,
-                style: TextStyle) -> Option<T>;
+                interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>,
+                style: TextStyle) -> Option<&'a T>;
 }
