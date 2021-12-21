@@ -54,6 +54,12 @@ impl From<String> for StyledText {
     }
 }
 
+impl From<&str> for StyledText {
+    fn from(s: &str) -> Self {
+        String::from(s).into()
+    }
+}
+
 /// Homemade styling system that can be abstracted over simple
 /// text, or HTML, markdown, etc. depending on the implementation.
 /// It can also be ignored without any problems.

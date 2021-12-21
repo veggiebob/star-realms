@@ -7,18 +7,19 @@ use std::rc::Rc;
 use components::card::active_card::IdCardCollection;
 use components::stack::SimpleStack;
 
-use crate::game::actions::client_comms::{Client, ClientActionOptionQuery, ClientQuery, TextStyle, StyledText};
+use crate::game::actions::client_comms::{Client, ClientActionOptionQuery, ClientQuery, TextStyle, StyledText, ClientActionOptionResponse};
 use crate::game::card_library::CardLibrary;
 use crate::game::components::{Authority, Coin, Combat, Goods};
 use crate::game::components::card::{Card, CardRef};
 use crate::game::components::card::active_card::ActiveCard;
-use crate::game::components::card::details::{CardSource, Action};
+use crate::game::components::card::details::{CardSource, Action, PlaySet, Play, Actionable};
 use crate::game::RelativePlayer::{Current, Opponent};
-use crate::game::util::Failure;
+use crate::game::util::{Failure, Join};
 use crate::game::util::Failure::{Fail, Succeed};
 use crate::game::components::stack::{Stack, move_all_to};
 use crate::game::components::card::details::Base::Outpost;
 use crate::game::components::card::in_game::{ActivePlay, Trigger};
+use ansi_term::Color;
 
 pub mod components;
 pub mod card_library;
@@ -369,7 +370,7 @@ impl GameState {
         //  - keep a running sum of damage (combat)
         {
             // gather the plays
-            let cards = &self.get_current_player().hand;
+            let cards = &self.get_current_player().hand; // todo: also gather base plays somehow
             let mut plays = hashmap!{};
             let mut idx: u32 = 0;
             for card_data in <IdCardCollection as Stack<ActiveCard>>::iter(&cards) {
@@ -387,23 +388,68 @@ impl GameState {
 
             let mut plays = {
                 let mut tmp: Vec<_> = (0..idx).into_iter().map(|_| vec![]).collect();
-                for (idx, v) in plays.iter() {
-                    v.into_iter().map(|p| p.play.actn.name.clone()).for_each(|n|
-                        tmp.get_mut(*idx as usize).unwrap().push(n)
-                    );
+                for idx in 0..idx {
+                    let v = plays.get(&idx).unwrap();
+                    v.into_iter()
+                        .map(|p| p.play.actn.name.clone())
+                        .for_each(|n|
+                            tmp.get_mut(idx as usize).unwrap().push(n)
+                        );
                 }
                 tmp
             };
-            client.resolve_action_query(ClientQuery {
+
+            let response = client.resolve_action_query(ClientQuery {
                 action_query: ClientActionOptionQuery::PlaySelection(plays),
                 performer: self.current_player
             }, &self);
+
+            if let ClientActionOptionResponse::PlaySelection(play) = response {
+                // if we get a valid response type,
+                if let Some((card_idx, play_idx)) = play {
+                    // and a selection was made,
+                    if let Some(play) = <IdCardCollection as Stack<CardRef>>::get(&cards, card_idx as usize)
+                        .and_then(|card: &CardRef| card.content.as_ref())
+                        .and_then(|playset: &PlaySet| playset.get(play_idx as usize)) {
+                        // and the selection actually produces output,
+                        // then we can continue to work with the play.
+                        let play: &Play = play; // IDE issues :')
+
+                        // evaluate the condition
+                        let cond_ok = if play.cond.is_some() {
+                            todo!()
+                        } else {
+                            true
+                        };
+
+                        if cond_ok {
+                            GameState::broadcast_message(client, format!("Playing the action '{}'", &play.actn.name).into());
+                            self.handle_action(client, &play.actn.item);
+                        }
+                    }
+                } else {
+                    // no selection was made (no cards / plays available)
+                    GameState::message_player(
+                        client,
+                        &self.current_player,
+                        "No plays left. Continuing, I guess!");
+                }
+            } else {
+                // wrong response type returned
+                GameState::broadcast_message(client,
+                    StyledText {
+                        style: TextStyle::error(),
+                        text: "Client Error: Not a valid response type. Expected PlaySelection(play)".to_string()
+                    }
+                );
+            }
 
         }
 
         // 2. deal damage to the opponent
         {
             let current_combat = self.get_current_player().turn_data.total_combat;
+            let current_player = self.current_player;
             let opponent = self.get_current_opponent_mut();
 
             // calculate the outpost with the least defense (if there is one)
@@ -429,9 +475,22 @@ impl GameState {
                         ).into()
                     );
                 } else {
+                    GameState::broadcast_message(
+                        client,
+                        format!("work in progress! you should pick the bases to do damage to!").into()
+                    );
                     // todo: choose which things to destroy
                 }
             } else {
+                GameState::broadcast_message(
+                    client,
+                    format!(
+                        "{:?} deals {} damage to {:?}",
+                        current_player,
+                        current_combat,
+                        current_player
+                    ).into()
+                );
                 let dead = opponent.deal_damage(current_combat);
                 if dead {
                     // tell both players that the game is over,
@@ -488,11 +547,45 @@ impl GameState {
         self.flip_turn();
     }
 
+    /// performs, based on the many parameters and choices involved
+    fn handle_action<C: Client>(&mut self, client: C, action: &Action) {
+        match action {
+            Action::Sequential(action_1, action_2) => {
+                // this performs two actions :)
+                // with join :(
+            },
+            Action::Unit(action) => {
+                match action {
+                    Join::Unit(action) => {
+
+                    },
+                    Join::Union(actions) => {
+
+                    },
+                    Join::Disjoint(actions) => {
+                        // ask the user to choose one of these options
+                    }
+                }
+            }
+        }
+    }
+
     fn all_players<T: Clone>(item: T) -> HashMap<Player, T> {
         hashmap!{
             Player::Player1 => item.clone(),
             Player::Player2 => item
         }
+    }
+
+    fn message_player<C: Client, T: Into<StyledText>>(client: &C, player: &Player, message: T) {
+        let message = message.into();
+        client.alert::<()>(
+            &hashmap!{
+                *player => message.text.as_str()
+            },
+            &GameState::all_players(None),
+            message.style
+        );
     }
 
     fn broadcast_message<C: Client>(client: &C, message: StyledText) {

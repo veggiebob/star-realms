@@ -8,6 +8,8 @@ use star_realms::game::actions::client_comms::{Client, ClientQuery, ClientAction
 use star_realms::game::components::card::details::CardSource;
 use std::fmt::Display;
 use star_realms::game::components::card::active_card::IdCardCollection;
+use star_realms::game::RelativePlayer::Current;
+use star_realms::game::components::card::details::CardSource::Hand;
 
 pub struct ClientPTUI {
     pub name: String
@@ -39,12 +41,13 @@ impl Client for ClientPTUI {
             ClientActionOptionQuery::PlaySelection(card_plays) => {
                 let num_cards = card_plays.len();
                 let mut idx = 0;
+                let hand = game.get_stack(Hand(Current));
                 for card in card_plays.iter() {
                     let mut px = 0;
                     if card.len() > 0 {
                         println!("{}", ClientPTUI::p_colored(
                             &query.performer,
-                            format!("Plays in card {}:", px)
+                            format!("{}. {}", idx, hand.get(idx).unwrap().name.as_str())
                         ));
                         for play in card {
                             println!("   {}", ClientPTUI::p_colored(
