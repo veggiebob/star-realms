@@ -20,6 +20,7 @@ use crate::game::components::stack::{Stack, move_all_to};
 use crate::game::components::card::details::Base::Outpost;
 use crate::game::components::card::in_game::{ActivePlay, Trigger};
 use ansi_term::Color;
+use std::borrow::BorrowMut;
 
 pub mod components;
 pub mod card_library;
@@ -386,7 +387,7 @@ impl GameState {
                 idx += 1;
             }
 
-            let mut plays = {
+            let plays = {
                 let mut tmp: Vec<_> = (0..idx).into_iter().map(|_| vec![]).collect();
                 for idx in 0..idx {
                     let v = plays.get(&idx).unwrap();
@@ -408,12 +409,13 @@ impl GameState {
                 // if we get a valid response type,
                 if let Some((card_idx, play_idx)) = play {
                     // and a selection was made,
-                    if let Some(play) = <IdCardCollection as Stack<CardRef>>::get(&cards, card_idx as usize)
+                    if let Some(play) = <IdCardCollection as Stack<CardRef>>::get(&self.get_current_player().hand, card_idx as usize)
                         .and_then(|card: &CardRef| card.content.as_ref())
-                        .and_then(|playset: &PlaySet| playset.get(play_idx as usize)) {
+                        .and_then(|playset: &PlaySet| playset.get(play_idx as usize))
+                        .and_then(|play: &Play| Some(play.clone())) {
                         // and the selection actually produces output,
                         // then we can continue to work with the play.
-                        let play: &Play = play; // IDE issues :')
+                        let mut play: Play = play; // IDE issues :')
 
                         // evaluate the condition
                         let cond_ok = if play.cond.is_some() {
@@ -424,7 +426,7 @@ impl GameState {
 
                         if cond_ok {
                             GameState::broadcast_message(client, format!("Playing the action '{}'", &play.actn.name).into());
-                            self.handle_action(client, &play.actn.item);
+                            self.handle_action(client, &mut play.actn.item);
                         }
                     }
                 } else {
@@ -548,7 +550,7 @@ impl GameState {
     }
 
     /// performs, based on the many parameters and choices involved
-    fn handle_action<C: Client>(&mut self, client: C, action: &Action) {
+    fn handle_action<C: Client>(&mut self, client: &mut C, action: &mut Action) {
         match action {
             Action::Sequential(action_1, action_2) => {
                 // this performs two actions :)
@@ -556,18 +558,83 @@ impl GameState {
             },
             Action::Unit(action) => {
                 match action {
-                    Join::Unit(action) => {
-
+                    Join::Unit(ref mut action) => {
+                        let client_info = self.query_actionable_information(client, &action);
+                        let mut run_func = (*action.run).borrow_mut();
+                        let run = (**run_func)(self, client_info);
+                        // todo: finish
                     },
                     Join::Union(actions) => {
-
+                        for action in actions {
+                            let mut action = Action::Unit(*action.clone()); // collapsed!
+                            self.handle_action(client, &mut action);
+                        }
                     },
                     Join::Disjoint(actions) => {
                         // ask the user to choose one of these options
+                        let i = GameState::anon_choice(client, actions.len(), &self.current_player);
+                        let mut action = actions.get(i).unwrap();
+                        let mut action = Action::Unit(*action.clone());  // collapsed!
+                        self.handle_action(client, &mut action);
                     }
                 }
             }
         }
+    }
+
+    /// handle action in its unit form: actionable
+    fn query_actionable_information<C: Client>(&mut self, client: &mut C, actionable: &Actionable) -> Option<ClientActionOptionResponse> {
+        if let Some(query) = &actionable.client_query {
+            let query = self.resolve_query_choice(client, query);
+            let query = ClientQuery {
+                action_query: query.clone(),
+                performer: self.current_player,
+            };
+            Some(client.resolve_action_query(query, self))
+        } else {
+            None
+        }
+    }
+
+    fn resolve_query_choice<'a, C: Client>(&self, client: &C, q: &'a Join<ClientActionOptionQuery>) -> &'a ClientActionOptionQuery {
+        match q {
+            Join::Unit(query) => {
+                query
+            },
+            Join::Union(_) => {
+                panic!("GameState::handle_actionable: Join::Union doesn't make sense in this scenario");
+            },
+            Join::Disjoint(queries) => {
+                let choice = GameState::anon_choice(client, queries.len(), &self.current_player);
+                let query = queries.get(choice).unwrap();
+                self.resolve_query_choice(client, query)
+            }
+        }
+    }
+
+    /// Ask the client to choose a number.
+    /// ideally this shouldn't ever be used,
+    /// because the user has no idea what they're choosing.
+    /// but it's an abstraction I need right now to implement things
+    /// as fast as possible
+    fn anon_choice<C: Client>(client: &C, num: usize, player: &Player) -> usize {
+        let choice_range = (0..num).map(|x| (x.clone().to_string(), x)).collect::<Vec<_>>();
+        let options: Vec<_> = choice_range.iter().map(|(s, n)| (s.as_str(), n)).collect();
+        let options = hashmap!{
+                    *player => Some(options)
+                };
+        let response: Option<&usize> = client.alert(
+            &hashmap!{
+                        *player => "Choose one option"
+                    },
+            &options,
+                TextStyle::plain()
+        );
+        *response.unwrap()
+    }
+
+    fn handle_query<C: Client>(client: &C, query: &ClientActionOptionQuery) -> ClientActionOptionResponse {
+        todo!()
     }
 
     fn all_players<T: Clone>(item: T) -> HashMap<Player, T> {

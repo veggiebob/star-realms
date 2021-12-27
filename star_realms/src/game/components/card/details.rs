@@ -8,6 +8,7 @@ use crate::game::components::Defense;
 use crate::game::components::Goods;
 use crate::game::{GameState, RelativePlayer};
 use crate::game::util::{Failure, Join, Named};
+use std::cell::RefCell;
 
 /// number type for counting cards
 pub type CardSizeT = u32;
@@ -16,7 +17,7 @@ pub type CardSizeT = u32;
 pub type PlaySet = Vec<Play>;
 
 /// struct that contains a condition, an action, and an exhaustion rule
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Play {
 
     /// the condition of this play (None meaning free, otherwise
@@ -116,7 +117,7 @@ pub struct Actionable {
 
     /// function that operates on game data when this action is chosen
     /// by the client
-    pub run: Rc<Box<ActionFunc>>,
+    pub run: Rc<RefCell<Box<ActionFunc>>>,
 
     /// some data structure representing a request for a decision from the client
     /// this will be blocking
@@ -159,14 +160,14 @@ impl Actionable {
         where F: 'static + FnMut(&mut GameState, ActionConfig) -> ActionResult {
         Actionable {
             client_query: None,
-            run: Rc::new(Box::new(f))
+            run: Rc::new(RefCell::new(Box::new(f)))
         }
     }
     pub fn new<F>(query: Join<ClientActionOptionQuery>, f: F) -> Actionable
         where F: 'static + FnMut(&mut GameState, ActionConfig) -> ActionResult {
         Actionable {
             client_query: Some(query),
-            run: Rc::new(Box::new(f))
+            run: Rc::new(RefCell::new(Box::new(f)))
         }
     }
 }

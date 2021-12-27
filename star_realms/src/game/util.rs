@@ -6,6 +6,7 @@ pub enum Failure<T> {
     Succeed
 }
 
+#[derive(Clone)]
 pub struct Named<T> {
     pub name: String,
     pub item: T,
@@ -32,6 +33,24 @@ pub enum Join<T: Clone> {
     Unit(T),
     Union(Vec<Box<Join<T>>>),
     Disjoint(Vec<Box<Join<T>>>)
+}
+
+impl<T: Clone> Join<T> {
+    fn from_vec(vec: Vec<T>, union: bool) -> Join<T> {
+        if vec.len() == 0 {
+            panic!("you idiot. Don't try to convert an empty vec into Join<T>");
+        } else if vec.len() == 1 {
+            let mut v = vec;
+            Join::Unit(v.remove(0))
+        } else {
+            let v = vec.into_iter().map(Join::Unit).map(Box::new).collect();
+            if union {
+                Join::Union(v)
+            } else {
+                Join::Disjoint(v)
+            }
+        }
+    }
 }
 
 impl<T: Clone> From<T> for Join<T> {
