@@ -29,6 +29,10 @@ pub mod main {
             name: "debug user!".to_string()
         };
         loop {
+            // this could be the idle state?
+            // it's kinda scuffed, but this game
+            // really isn't meant to be played as a PTUI
+            // todo: let the player see some cards!
             game.advance(&mut client);
         }
         println!("cl_client::main::debug: Game has ended!");

@@ -28,7 +28,7 @@ pub mod util;
 pub mod actions;
 pub mod requirements;
 
-type CardStack = SimpleStack<CardRef>;
+pub type CardStack = SimpleStack<CardRef>;
 
 #[derive(Debug)]
 pub struct TurnData {
@@ -418,8 +418,9 @@ impl GameState {
                         let mut play: Play = play; // IDE issues :')
 
                         // evaluate the condition
-                        let cond_ok = if play.cond.is_some() {
-                            todo!()
+                        let cond_ok = if let Some(cond) = play.cond {
+                            println!("{}", Color::Red.paint("println: cond should be checked here. returning true for now"));
+                            true
                         } else {
                             true
                         };
@@ -549,20 +550,53 @@ impl GameState {
         self.flip_turn();
     }
 
+    fn traverse_actions<C: Client>(&mut self, client: &mut C, actions: &mut Join<Action>) {
+        match actions {
+            Join::Unit(ref mut action) => self.handle_action(client, action),
+            Join::Union(ref mut actions) => {
+                for action in actions {
+                    self.traverse_actions(client, action);
+                }
+            }
+            Join::Disjoint(ref mut actions) => {
+                let i = GameState::anon_choice(client, actions.len(), &self.current_player);
+                self.traverse_actions(client, actions.get_mut(i).unwrap());
+            }
+        }
+    }
+
     /// performs, based on the many parameters and choices involved
     fn handle_action<C: Client>(&mut self, client: &mut C, action: &mut Action) {
         match action {
             Action::Sequential(action_1, action_2) => {
-                // this performs two actions :)
-                // with join :(
+                // I'm not even sure if the complexity from adding a Join<Action>
+                // inside sequential is worth it, or even makes sense
+                self.traverse_actions(client, action_1);
+                self.traverse_actions(client, action_2);
             },
             Action::Unit(action) => {
                 match action {
                     Join::Unit(ref mut action) => {
                         let client_info = self.query_actionable_information(client, &action);
+
+                        // this cannot be borrowed multiple times!
+                        // compiler doesn't check this, it's checked at runtime
                         let mut run_func = (*action.run).borrow_mut();
                         let run = (**run_func)(self, client_info);
-                        // todo: finish
+                        match run {
+                            Ok(_) => {
+                                println!("println: successfully ran an action");
+                            }
+                            Err(e) => {
+                                GameState::broadcast_message(
+                                    client,
+                                    StyledText {
+                                        style: TextStyle::error(),
+                                        text: format!("Action failed! {}", e)
+                                    }
+                                );
+                             }
+                        }
                     },
                     Join::Union(actions) => {
                         for action in actions {

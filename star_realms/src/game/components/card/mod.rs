@@ -24,7 +24,8 @@ pub mod in_game;
 
 pub type CardRef = Rc<Card>;
 
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub struct Card {
     pub cost: Coin,
     pub name: String,

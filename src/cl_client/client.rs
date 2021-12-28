@@ -102,7 +102,7 @@ impl Client for ClientPTUI {
     }
 
     fn alert<'a, T: Eq>(&self, message: &HashMap<Player, &str>, interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>, style: TextStyle) -> Option<&'a T> {
-        println!("alert received.");
+        // println!("alert received.");
         for (player, msg) in message.iter() {
             println!("{:?}, {}", player, ClientPTUI::p_colored(player, msg));
         }
@@ -152,7 +152,7 @@ fn print_options<T: ToString>(options: &Vec<T>) {
     }
 }
 
-fn input() -> String {
+pub fn input() -> String {
     let mut s = String::new();
     io::stdin().read_line(&mut s).unwrap();
     (&s[0..s.len()-1]).to_string()

@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
+
+use crate::game::{GameState, Player};
+use crate::game::components::card::{CardRef, Card};
 use crate::game::components::card::details::{CardSizeT, CardSource};
-use crate::game::{Player, GameState};
-use crate::game::components::card::CardRef;
+use std::rc::Rc;
 
 /// Query descriptors that require the client to get data from the user.
 /// Each of the following should have a corresponding response in the
@@ -101,4 +103,72 @@ pub trait Client {
                 message: &HashMap<Player, &str>,
                 interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>,
                 style: TextStyle) -> Option<&'a T>;
+
+    fn message_player<T: Into<StyledText>>(&self, player: &Player, message: T) {
+        let message = message.into();
+        self.alert::<()>(
+            &hashmap!{
+                *player => message.text.as_str()
+            },
+            &all_players(None),
+            message.style
+        );
+    }
+
+    fn broadcast_message(&self, message: StyledText) {
+        self.alert::<()>(
+            &all_players(message.text.as_str()),
+            &all_players(None),
+            message.style);
+    }
+
+}
+
+/// helper function for broadcast method
+fn all_players<T: Clone>(item: T) -> HashMap<Player, T> {
+    hashmap!{
+            Player::Player1 => item.clone(),
+            Player::Player2 => item
+        }
+}
+
+/// handles the cache that is updated when the client receives updates
+/// this only accounts for visible cards. I'd assume discard is also in this.
+/// However, since it uses a generic map from CardSource, I assume it could be any updates
+pub struct VisibleCardStackCache {
+    cache: HashMap<CardSource, Vec<CardRef>>
+}
+
+impl VisibleCardStackCache {
+    pub fn new() -> VisibleCardStackCache {
+        VisibleCardStackCache {
+            cache: HashMap::new()
+        }
+    }
+    pub fn update<I: Iterator<Item=CardRef>>(&mut self, source: CardSource, cards: I) {
+        let mut tmp = vec![];
+        // does order need to be preserved?
+        // I think iti does. If it were merely for the purposes of displaying, then no?
+        for card in cards {
+            tmp.push(card.clone());
+        }
+        self.cache.insert(source, tmp); // overwrite the stack completely
+    }
+
+    pub fn get(&self, source: CardSource) -> Option<Vec<CardRef>> {
+        self.cache.get(&source).map(Clone::clone)
+    }
+
+    pub fn get_or_alert<C: Client>(&self, client: &C, source: CardSource) -> Option<Vec<CardRef>> {
+        match self.get(source) {
+            None => {
+                client.broadcast_message(StyledText {
+                    text: format!("Unable to get cached card deck {:?}", source),
+                    style: TextStyle::error()
+                });
+                None
+            }
+            Some(deck) => Some(deck)
+        }
+    }
 }
