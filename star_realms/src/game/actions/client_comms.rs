@@ -62,6 +62,18 @@ impl From<&str> for StyledText {
     }
 }
 
+impl Into<HTMLText> for StyledText {
+    fn into(self) -> HTMLText {
+        todo!("convert text with style into HTML!")
+    }
+}
+
+impl Into<ANSIText> for StyledText {
+    fn into(self) -> ANSIText {
+        todo!("convert text with style into ANSI colored/styled text!")
+    }
+}
+
 /// Homemade styling system that can be abstracted over simple
 /// text, or HTML, markdown, etc. depending on the implementation.
 /// It can also be ignored without any problems.
@@ -92,6 +104,25 @@ impl TextStyle {
     }
 }
 
+
+/// Simple struct to flag text as HTML
+pub struct HTMLText(String);
+
+/// Simple struct to flag text as ANSI (color-enabled)
+pub struct ANSIText(String);
+
+impl ToString for HTMLText {
+    fn to_string(&self) -> String {
+        self.0.clone()
+    }
+}
+
+impl ToString for ANSIText {
+    fn to_string(&self) -> String {
+        self.0.clone()
+    }
+}
+
 pub trait Client {
     /// Function that should be able to answer these "action requests".
     /// That are configuration for an action.
@@ -100,13 +131,15 @@ pub trait Client {
     /// A generic way to send messages and alerts in text format to the client.
     /// These would show up either as log output (if passive) or a pop-up dialog box in a GUI game
     fn alert<'a, T: Eq>(&self,
+                game: &GameState,
                 message: &HashMap<Player, &str>,
                 interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>,
                 style: TextStyle) -> Option<&'a T>;
 
-    fn message_player<T: Into<StyledText>>(&self, player: &Player, message: T) {
+    fn message_player<T: Into<StyledText>>(&self, game: &GameState, player: &Player, message: T) {
         let message = message.into();
         self.alert::<()>(
+            game,
             &hashmap!{
                 *player => message.text.as_str()
             },
@@ -115,8 +148,9 @@ pub trait Client {
         );
     }
 
-    fn broadcast_message(&self, message: StyledText) {
+    fn broadcast_message(&self, game: &GameState, message: StyledText) {
         self.alert::<()>(
+            game,
             &all_players(message.text.as_str()),
             &all_players(None),
             message.style);
@@ -159,10 +193,10 @@ impl VisibleCardStackCache {
         self.cache.get(&source).map(Clone::clone)
     }
 
-    pub fn get_or_alert<C: Client>(&self, client: &C, source: CardSource) -> Option<Vec<CardRef>> {
+    pub fn get_or_alert<C: Client>(&self, game: &GameState, client: &C, source: CardSource) -> Option<Vec<CardRef>> {
         match self.get(source) {
             None => {
-                client.broadcast_message(StyledText {
+                client.broadcast_message(game, StyledText {
                     text: format!("Unable to get cached card deck {:?}", source),
                     style: TextStyle::error()
                 });

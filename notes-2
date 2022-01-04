@@ -1,0 +1,26 @@
+ok
+	I need to make a robust system to update the player orn the current state of the game.
+	for example, they need to know the state of the trade row.
+	how should that be accomplished? I could add a method to query the state of the trade row, thereby allowing the client to update whenever it sees fit.
+	Or, I could add special update messages that make clear what exacctly needs to be updated, and when.
+	This way, the client is always up to date as much as the server thinks it should be. In the case of a disparity, it is the result of either the client not following the messages correctly, 
+	or the server being broken, which should never be the case. 
+	Not that  the game would ever be bugless, but but it shouldn't happen very often at the very least.
+	it would be nice if the client never had to deal with a problem with the display updates not happening.
+	
+	Ok, so it looks like I'm going to need to update the display from the server side. In nthe case of a PTUI, does that mean it needs to have a cache of card information, and such?it seems a bit unfari since since that information should be freely available. However, the goal of the client is merely to communicate between the server and the userso should the client be able to see private server information?
+	I don't really care, unless someone else plans to write a client besides me, or mods would dbe added. 
+	Additionally, a cache in the client sied could dbemore readable in terms of what *should* be visible, and what shouldn't. 
+	
+	ok, in that case, which cards should be visible?
+	it should be: trade deck, and only thecurrent player's hand. How does one control visibility between the players. Well, even though a player's hand might be hidden from the other player in real life, i
+	well, we can't control visibility in a PTUI anyway. Although, I don't thin k it makes a difference for this cgame. 
+	the table stack of cards is also publicly visible. should all card visibilities be handled 
+	should decks have string names? that seems a little bit like a cheat.
+	Alos, it's not idiomatic to hwhat I've been writing in the past. Better to make an enum, right? Doesn't this just mmake a mirror of CardSource from the server?
+	yes, but it's a map containing only the most important card information. Should a create a struct which eliminates the card's contents, in favor of just showing nam and other essential information?
+	No, probably not, since I'm planning to name the actions anyway. 
+	slowly, more things g et named :)
+	this is for the better. Things should be named. should I implement that mirror now? or is it better to just add a query to gamestate for convenience purpposes? would that be relatively easy to implement? yes. 
+	
+	after thinking more about it, this shortcut shouldn't be implemented because of the implications of idle game state it would change. I mean "idle" by the period in which the player has time to look around and decide things, while playing card actions. This involves observation *and* mutation.

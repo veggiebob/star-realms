@@ -32,6 +32,7 @@ pub struct Play {
 }
 
 pub type ExhaustionLevel = u32;
+
 #[derive(Debug, Clone)]
 pub enum Exhaustibility {
     Once,

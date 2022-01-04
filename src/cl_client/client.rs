@@ -28,9 +28,19 @@ impl ClientPTUI {
             Player::Player2 => format!("{}", ClientPTUI::p2(msg))
         }
     }
+    // same signature as get_value_input, but it allows the player to look around at the board and state of public items
+    fn prompt_or_look<T: FromStr, U: FnMut(&T) -> bool>(game: &GameState, valid: U) -> T {
+        if prompt_yes_no("Would you like to see the game state before making a decision?") {
+            println!("{}", Color::Red.paint("Print game info here"));
+            ClientPTUI::prompt_or_look(game, valid)
+        } else {
+            get_value_input(valid)
+        }
+    }
 }
 
 impl Client for ClientPTUI {
+
     fn resolve_action_query(&mut self, query: ClientQuery, game: &GameState) -> ClientActionOptionResponse {
         // Resolve Relative Player
         let rrp = |p| match p {
@@ -65,10 +75,10 @@ impl Client for ClientPTUI {
                     ClientActionOptionResponse::PlaySelection(None)
                 } else {
                     println!("{}", ClientPTUI::p_colored(&query.performer, format!("Enter a card index (0-{}):", num_cards - 1)));
-                    let card_index: usize = get_value_input(|id| *id < num_cards);
+                    let card_index: usize = ClientPTUI::prompt_or_look(game, |id| *id < num_cards);
                     println!("{}", ClientPTUI::p_colored(&query.performer, "Enter a play index:"));
                     let card = card_plays.get(card_index).unwrap();
-                    let play_index: usize = get_value_input(|idx| *idx < card.len());
+                    let play_index: usize = ClientPTUI::prompt_or_look(game, |idx| *idx < card.len());
                     ClientActionOptionResponse::PlaySelection(Some((card_index as u32, play_index as u32)))
                 }
             }
@@ -77,31 +87,20 @@ impl Client for ClientPTUI {
                 println!("{}", ClientPTUI::p_colored(&query.performer, "Select a card."));
                 println!("{}", ClientPTUI::p_colored(&query.performer,
                     format!("There are {} cards in this stack. Would you like to see them? (y/n): ", stack.len())));
-                let see_more = ensure(
-                    input,
-                    |i| match i.as_str() {
-                        "y" | "Y" => Ok(true),
-                        "n" | "N" => Ok(false),
-                        _ => Err(())
-                    },
-                    |_| true,
-                    |_| println!("{}", ClientPTUI::p_colored(&query.performer, "Must be 'y' or 'n'")),
-                    |_| println!("{}", ClientPTUI::p_colored(&query.performer, "Must be 'y' or 'n'"))
-                );
-                if see_more {
+                if ask_yes_no() {
                     let mut idx = 0;
                     for card in stack.iter() {
                         println!("{}", ClientPTUI::p_colored(&query.performer, format!("{}. {}", idx, card.name)));
                         idx += 1;
                     }
                 }
-                let index = get_value_input(|idx| (*idx as usize) < stack.len());
+                let index = ClientPTUI::prompt_or_look(game, |idx| (*idx as usize) < stack.len());
                 ClientActionOptionResponse::CardSelection(source, index)
             }
         }
     }
 
-    fn alert<'a, T: Eq>(&self, message: &HashMap<Player, &str>, interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>, style: TextStyle) -> Option<&'a T> {
+    fn alert<'a, T: Eq>(&self, game: &GameState, message: &HashMap<Player, &str>, interrupt: &HashMap<Player, Option<Vec<(&str, &'a T)>>>, style: TextStyle) -> Option<&'a T> {
         // println!("alert received.");
         for (player, msg) in message.iter() {
             println!("{:?}, {}", player, ClientPTUI::p_colored(player, msg));
@@ -118,7 +117,7 @@ impl Client for ClientPTUI {
                             println!("{}. {}", idx, desc);
                             idx += 1;
                         }
-                        let response: u32 = get_value_input(|u| *u < idx);
+                        let response: u32 = ClientPTUI::prompt_or_look(game, |u| *u < idx);
                         let (_, response) = options.get(response as usize).unwrap();
                         responses.insert(player, response);
                     },
@@ -168,6 +167,30 @@ pub fn get_value_input<T: FromStr, U: FnMut(&T) -> bool>(valid: U) -> T {
         |_| println!("invalid input"),
         |s| println!("invalid input of '{:?}'", s)
     )
+}
+
+pub fn ask_yes_no() -> bool {
+    ensure(
+        input,
+        |i| match i.as_str() {
+            "y" | "Y" => Ok(true),
+            "n" | "N" => Ok(false),
+            _ => Err(())
+        },
+        |_| true,
+        |_| println!("Must enter Y/N"),
+        |_| println!("Must enter Y/N")
+    )
+}
+
+pub fn prompt<T: FromStr, U: FnMut(&T) -> bool, M: ToString>(message: M, valid: U) -> T {
+    println!("{}", message.to_string());
+    get_value_input(valid)
+}
+
+pub fn prompt_yes_no<M: ToString>(message: M) -> bool {
+    println!("{} ", message.to_string());
+    ask_yes_no()
 }
 
 /// A more generic `get_value_input` that uses `gen` to get string values,

@@ -20,7 +20,7 @@ use crate::game::components::stack::{Stack, move_all_to};
 use crate::game::components::card::details::Base::Outpost;
 use crate::game::components::card::in_game::{ActivePlay, Trigger};
 use ansi_term::Color;
-use std::borrow::BorrowMut;
+use std::borrow::{BorrowMut, Borrow};
 
 pub mod components;
 pub mod card_library;
@@ -177,10 +177,12 @@ impl PlayerArea {
                      will_discard: bool,
                      played_this_turn: bool
     ) -> ActiveCard {
+        let content = (&card.content).clone().map(|ps| ps.iter().map(ActivePlay::new).collect());
         ActiveCard {
             card,
             will_discard,
             played_this_turn,
+            content
         }
     }
 
@@ -426,20 +428,22 @@ impl GameState {
                         };
 
                         if cond_ok {
-                            GameState::broadcast_message(client, format!("Playing the action '{}'", &play.actn.name).into());
+                            self.broadcast_message(client, format!("Playing the action '{}'", &play.actn.name).into());
+
+                            // root action handle.
                             self.handle_action(client, &mut play.actn.item);
                         }
                     }
                 } else {
                     // no selection was made (no cards / plays available)
-                    GameState::message_player(
+                    self.message_player(
                         client,
                         &self.current_player,
                         "No plays left. Continuing, I guess!");
                 }
             } else {
                 // wrong response type returned
-                GameState::broadcast_message(client,
+                self.broadcast_message(client,
                     StyledText {
                         style: TextStyle::error(),
                         text: "Client Error: Not a valid response type. Expected PlaySelection(play)".to_string()
@@ -453,10 +457,9 @@ impl GameState {
         {
             let current_combat = self.get_current_player().turn_data.total_combat;
             let current_player = self.current_player;
-            let opponent = self.get_current_opponent_mut();
 
             // calculate the outpost with the least defense (if there is one)
-            let min_defense = opponent.table.cards.iter().filter_map(
+            let min_defense = self.get_current_opponent_mut().table.cards.iter().filter_map(
                 |ac|
                     if let Some(Outpost(defense)) = ac.card.base {
                         Some(defense)
@@ -469,7 +472,7 @@ impl GameState {
                 if self.get_current_player().turn_data.total_combat < d {
                     // if the amount of combat is less than the defense of
                     // the lowest outpost, the player can't do any damage
-                    GameState::broadcast_message(
+                    self.broadcast_message(
                         client,
                         format!(
                             "No damage could be done. {} < {}",
@@ -478,14 +481,14 @@ impl GameState {
                         ).into()
                     );
                 } else {
-                    GameState::broadcast_message(
+                    self.broadcast_message(
                         client,
                         format!("work in progress! you should pick the bases to do damage to!").into()
                     );
                     // todo: choose which things to destroy
                 }
             } else {
-                GameState::broadcast_message(
+                self.broadcast_message(
                     client,
                     format!(
                         "{:?} deals {} damage to {:?}",
@@ -494,7 +497,7 @@ impl GameState {
                         current_player
                     ).into()
                 );
-                let dead = opponent.deal_damage(current_combat);
+                let dead = self.get_current_opponent_mut().deal_damage(current_combat);
                 if dead {
                     // tell both players that the game is over,
                     // and give them the option to quit, or ... quit.
@@ -508,12 +511,14 @@ impl GameState {
                     let options = Some(vec![("Ok", &op)]);
 
                     let res = client.alert(
+                        self,
                         &GameState::all_players(message),
                         &GameState::all_players(options),
                         TextStyle::attention()
                     );
                     if res.is_some() {
                         let x = client.alert::<()>(
+                            self,
                             {
                                 let msg = "Quitting the game.";
                                 &hashmap! {
@@ -559,7 +564,7 @@ impl GameState {
                 }
             }
             Join::Disjoint(ref mut actions) => {
-                let i = GameState::anon_choice(client, actions.len(), &self.current_player);
+                let i = self.anon_choice(client, actions.len(), &self.current_player);
                 self.traverse_actions(client, actions.get_mut(i).unwrap());
             }
         }
@@ -588,7 +593,7 @@ impl GameState {
                                 println!("println: successfully ran an action");
                             }
                             Err(e) => {
-                                GameState::broadcast_message(
+                                self.broadcast_message(
                                     client,
                                     StyledText {
                                         style: TextStyle::error(),
@@ -606,7 +611,7 @@ impl GameState {
                     },
                     Join::Disjoint(actions) => {
                         // ask the user to choose one of these options
-                        let i = GameState::anon_choice(client, actions.len(), &self.current_player);
+                        let i = self.anon_choice(client, actions.len(), &self.current_player);
                         let mut action = actions.get(i).unwrap();
                         let mut action = Action::Unit(*action.clone());  // collapsed!
                         self.handle_action(client, &mut action);
@@ -639,7 +644,7 @@ impl GameState {
                 panic!("GameState::handle_actionable: Join::Union doesn't make sense in this scenario");
             },
             Join::Disjoint(queries) => {
-                let choice = GameState::anon_choice(client, queries.len(), &self.current_player);
+                let choice = self.anon_choice(client, queries.len(), &self.current_player);
                 let query = queries.get(choice).unwrap();
                 self.resolve_query_choice(client, query)
             }
@@ -651,13 +656,14 @@ impl GameState {
     /// because the user has no idea what they're choosing.
     /// but it's an abstraction I need right now to implement things
     /// as fast as possible
-    fn anon_choice<C: Client>(client: &C, num: usize, player: &Player) -> usize {
+    fn anon_choice<C: Client>(&self, client: &C, num: usize, player: &Player) -> usize {
         let choice_range = (0..num).map(|x| (x.clone().to_string(), x)).collect::<Vec<_>>();
         let options: Vec<_> = choice_range.iter().map(|(s, n)| (s.as_str(), n)).collect();
         let options = hashmap!{
                     *player => Some(options)
                 };
         let response: Option<&usize> = client.alert(
+            self,
             &hashmap!{
                         *player => "Choose one option"
                     },
@@ -678,9 +684,10 @@ impl GameState {
         }
     }
 
-    fn message_player<C: Client, T: Into<StyledText>>(client: &C, player: &Player, message: T) {
+    fn message_player<C: Client, T: Into<StyledText>>(&self, client: &C, player: &Player, message: T) {
         let message = message.into();
         client.alert::<()>(
+            self,
             &hashmap!{
                 *player => message.text.as_str()
             },
@@ -689,8 +696,9 @@ impl GameState {
         );
     }
 
-    fn broadcast_message<C: Client>(client: &C, message: StyledText) {
+    fn broadcast_message<C: Client>(&self, client: &C, message: StyledText) {
         client.alert::<()>(
+            self,
             &GameState::all_players(message.text.as_str()),
             &GameState::all_players(None),
             message.style);

@@ -1,19 +1,27 @@
-use crate::game::components::card::CardRef;
-use crate::game::components::stack::{SimpleStack, Stack};
-use crate::game::{CardStack};
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::slice::Iter;
-use std::collections::{HashSet, HashMap};
-use std::rc::{Rc, Weak};
+
 use ansi_term::Color;
+
+use crate::game::CardStack;
+use crate::game::components::card::CardRef;
+use crate::game::components::card::details::ExhaustionLevel;
+use crate::game::components::card::in_game::ActivePlay;
+use crate::game::components::stack::{SimpleStack, Stack};
 
 /// briefly describes how a card has been brought into play
 pub struct ActiveCard {
     pub card: CardRef,
     pub will_discard: bool,
-    pub played_this_turn: bool
+    pub played_this_turn: bool,
+
+    ///
+    pub content: Option<Vec<ActivePlay>>
 }
 
-///
+/// stack of active cards
+// used to have ids attached to them, but not anymore
 pub struct IdCardCollection {
     pub cards: SimpleStack<ActiveCard>
 }
@@ -21,7 +29,7 @@ pub struct IdCardCollection {
 impl IdCardCollection {
     pub fn new(cards: SimpleStack<ActiveCard>) -> IdCardCollection {
         IdCardCollection {
-            cards
+            cards,
         }
     }
 }
@@ -65,15 +73,27 @@ impl Stack<CardRef> for IdCardCollection {
 
     fn add(&mut self, item: CardRef) {
         println!("{}", Color::Yellow.paint("Warning! Adding a card to an IdCardCollection without specifying properties of an ActiveCard!"));
+        let content = (&item.content).clone().map(|ps| ps.iter().map(ActivePlay::new).collect());
         let card = ActiveCard {
             card: item,
             will_discard: true, // ???
-            played_this_turn: true // ???
+            played_this_turn: true, // ???
+            content
         };
         self.add(card);
     }
 
     fn remove(&mut self, index: usize) -> Option<CardRef> {
         <IdCardCollection as Stack<ActiveCard>>::remove(self, index).map(|c| c.card)
+    }
+}
+
+impl ActiveCard {
+
+    /// if it's a valid index, then it is Some()
+    ///     in that case, if it can't be used anymore, it will be None
+    ///     otherwise, it will be Some(n) for a number of times more that it can be used
+    pub fn exhaustion(&self, index: usize) -> Option<Option<ExhaustionLevel>> {
+        self.content.as_ref().and_then(|c| c.get(index).map(|f| f.exhaustions_left()))
     }
 }

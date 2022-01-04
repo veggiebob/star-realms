@@ -61,31 +61,33 @@ impl<T: Clone> From<T> for Join<T> {
 
 impl<T: Display + Clone> Display for Join<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Do Panic!
+        // not sure when this would fail but if it does I'll find out eventually
         match self {
             Join::Unit(x) => x.fmt(f),
             Join::Union(xs) => {
                 if xs.len() == 0 {
-                    Display::fmt("[]", f);
+                    Display::fmt("[]", f).unwrap();
                     Ok(())
                 } else {
-                    Display::fmt("[", f);
+                    Display::fmt("[", f).unwrap();
                     let mut i = 0;
                     let mut res = Ok(());
                     while res.is_ok() && i < xs.len() {
                         res = xs[i].fmt(f);
-                        Display::fmt(", ", f);
+                        Display::fmt(", ", f).unwrap();
                         i += 1;
                     }
-                    Display::fmt("]", f);
+                    Display::fmt("]", f).unwrap();
                     res
                 }
             },
             Join::Disjoint(xs) => {
                 if xs.len() == 0 {
-                    Display::fmt("{}", f);
+                    Display::fmt("{}", f).unwrap();
                     Ok(())
                 } else {
-                    Display::fmt("{", f);
+                    Display::fmt("{", f).unwrap();
                     let mut i = 0;
                     let mut res = Ok(());
                     while res.is_ok() && i < xs.len() {
@@ -93,7 +95,7 @@ impl<T: Display + Clone> Display for Join<T> {
                         Display::fmt(", ", f);
                         i += 1;
                     }
-                    Display::fmt("}", f);
+                    Display::fmt("}", f).unwrap();
                     res
                 }
             }
